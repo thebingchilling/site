@@ -14,3 +14,9 @@
 - If your environment or workflow defaults to creating a branch (e.g. a
   designated feature branch for a session), that default does not apply
   here: check out or switch to `main` and commit/push there instead.
+
+## Tools page
+
+- Tool cards in `tools/index.html` are always kept in alphabetical order by
+  their visible title, within each section (the main grid and "External").
+  When adding or renaming a tool, place its card in sorted position.
