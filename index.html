@@ -16,8 +16,8 @@
   <meta name="twitter:title" content="Bingqilin" />
   <meta name="twitter:description" content="Search and stream movies and TV shows from sources you configure yourself." />
   <meta name="twitter:image" content="https://thebingchilling.github.io/icons/icon-512.png" />
-  <!-- ── App-shell / installability metadata. Together with manifest.webmanifest
-       and sw.js, this is what lets the OS treat this as a real installed app
+  <!-- ── App-shell / installability metadata. Together with manifest.webmanifest,
+       this is what lets the OS treat this as a real installed app
        (own icon, own window, no address bar) rather than a browser tab. ── -->
   <link rel="manifest" href="/manifest.webmanifest" />
   <!-- Kept in sync with the current surface color (light/dark, plus any manual
@@ -913,14 +913,12 @@
 <script src="/shared/feed.js"></script>
 <script>
 /* ═══════════════════════════════════════════════════════
-   NATIVE APP SHELL: ripple feedback + service worker
+   NATIVE APP SHELL: ripple feedback
    ─────────────────────────────────────────────────────
    spawnRipple gives every Material surface (buttons, cards, chips) the
    same tap feedback a native control has — the CSS :hover states already
    in this file never fire on a touchscreen, which is the main reason the
    app currently reads as a webpage rather than a native surface.
-   SW registration is best-effort: on failure the app just runs exactly as
-   it did before (no offline shell / install prompt), never broken.
 ═══════════════════════════════════════════════════════ */
 BQChrome.initRipple(".icon-btn, .btn, .chip, .media-card, .ep-card, .source-card, " +
   ".play-btn, .share-btn, .player-back, .bottom-nav__item, .segmented__item, .menu__item");
@@ -952,9 +950,6 @@ function initSwipeBack(container, onBack, edge = 24, threshold = 80) {
   container.addEventListener("touchend", () => { tracking = false; });
 }
 
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
-}
 
 /* ═══════════════════════════════════════════════════════
    STORAGE

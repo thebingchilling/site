@@ -388,41 +388,6 @@ window.BQChrome = (function () {
     return { select: (tab) => select(tab, false) };
   }
 
-  /* ── Offline indicator ──────────────────────────────────────────────
-     Several pages need the network to do anything — TMDB, the playlists,
-     the rate providers, the CORS proxies — and offline they each failed
-     in their own vocabulary ("Could not reach TMDB", "unreachable right
-     now"), leaving the person to work out that the common cause was their
-     connection. One banner says it once, for all of them. ── */
-  function initOfflineBanner() {
-    if (!("onLine" in navigator)) return;
-    const render = () => {
-      const existing = $("bqOfflineBar");
-      if (navigator.onLine) { if (existing) existing.remove(); return; }
-      if (existing) return;
-      const bar = document.createElement("div");
-      bar.id = "bqOfflineBar";
-      bar.className = "offline-bar";
-      bar.setAttribute("role", "status");
-      bar.innerHTML = '<span class="material-icons" aria-hidden="true">cloud_off</span>' +
-                      "<span>You're offline — anything that needs the network won't load.</span>";
-      document.body.appendChild(bar);
-    };
-    window.addEventListener("online", render);
-    window.addEventListener("offline", render);
-    render();
-  }
-
-  // Opt-out-by-absence: a page without a <body> yet just gets it on
-  // DOMContentLoaded.
-  function initAppChrome() {
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", initOfflineBanner, { once: true });
-    } else {
-      initOfflineBanner();
-    }
-  }
-  initAppChrome();
 
 
   /* ═══════════════ Error text ═══════════════

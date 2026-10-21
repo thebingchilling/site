@@ -453,9 +453,6 @@
     downloadFonts([font], font.name + " " + (font.style || ""), btn);
   });
 
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
-  }
 })();
 </script>
 </body>

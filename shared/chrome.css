@@ -209,27 +209,4 @@
 .bottom-nav__item[aria-current="page"] .bottom-nav__label { font-weight: 600; }
 
 
-/* ═══════════════════════════════════════════════════════════════════════
-   Offline banner — injected by chrome.js, so it lives here rather than in
-   any one page's <style>. It sits above the bottom nav's safe-area inset
-   so it can't be hidden behind the OS gesture bar on a phone.
-   ═══════════════════════════════════════════════════════════════════════ */
-.offline-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 70;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.55rem 1rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
-  background: var(--md-error-container);
-  color: var(--md-on-error-container);
-  font: var(--type-body-small);
-  letter-spacing: var(--track-body-small);
-  text-align: center;
-}
-.offline-bar .material-icons { font-size: 18px; flex-shrink: 0; }
 

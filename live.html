@@ -864,9 +864,6 @@ function initSwipeBack(container, onBack, edge = 24, threshold = 80) {
   container.addEventListener("touchend", () => { tracking = false; });
 }
 
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
-}
 
 /* No channels ship with this app — the person adds their own TV/Radio
    playlists (M3U8 or JSON, auto-detected) and optionally an XMLTV EPG url

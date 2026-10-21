@@ -238,9 +238,6 @@
   BQChrome.initRipple(".icon-btn, .btn, .dropzone, .option-card, .bottom-nav__item");
   BQChrome.initTheme();
 
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
-  }
 
   /* ── qpdf (WebAssembly) engine ──────────────────────────────────────────
      Vendored locally (see vendor/README.md) rather than pulled from a CDN,
