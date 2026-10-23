@@ -171,6 +171,25 @@ recording no opener and so no match at all.
 2. Turn on **Developer mode**
 3. **Load unpacked** → pick this `extension/` folder
 
+## Live TV: the TVNZ channels
+
+Not popups at all, but it needs an extension too. TVNZ 1, TVNZ 2 and DUKE
+are Widevine DASH streams whose manifest, segments and licence servers
+only let TVNZ's own pages read them: Chrome receives the bytes and then
+refuses to hand them to live.html. `rules/live-cors.json` is a
+declarativeNetRequest rule that sets `Access-Control-Allow-Origin: *` on
+those responses, only for requests this site makes. Everything is still
+fetched straight from TVNZ on the viewer's own connection, so the NZ
+geo-block applies as normal and there is no proxy in the middle.
+
+`content/live-cors.js` marks live.html with `data-bq-live-cors`, so a DRM
+channel that fails to load can tell the viewer to install the extension
+instead of showing a bare network error.
+
+The `*` rather than this site's origin is deliberate: the manifest is
+reached through a cross-origin redirect (i.mjh.nz → TVNZ), after which
+Chrome sends `Origin: null`, which a named origin would not match.
+
 ## Building a .crx
 
 `.github/workflows/package-extension.yml` zips this folder and signs it
@@ -238,12 +257,14 @@ works everywhere, which is why that is still listed first above.
 
 ## Files
 
-- `manifest.json` — MV3; `webNavigation` + `storage`, one host permission
+- `manifest.json` — MV3; `webNavigation` + `storage` + `declarativeNetRequest`, host permissions for this site and the TVNZ channels' servers
 - `background.js` — the three rules
 - `content/keepalive.js` — keeps the worker resident, reports source origins
 - `content/no-popup.js` — the decoy window and the target cancelling,
   injected into granted sources
 - `content/no-popup-gate.js` — undoes both outside a player tab
+- `content/live-cors.js` — tells live.html the TVNZ channels can be read
+- `rules/live-cors.json` — the header rule that lets them be read
 - `lib/scope.js` — the path allow-list that defines "the player"
 - `../.github/workflows/package-extension.yml` — build and release
 - `../.github/scripts/pack-crx.mjs` — the CRX3 writer

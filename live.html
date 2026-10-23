@@ -1723,15 +1723,20 @@ function describeShakaError(err) {
         for DRM playback to even be attempted.
      2. A Widevine CDM in the browser — Chrome/Edge/Firefox/Android have one;
         Safari/iOS use FairPlay instead and can never do this.
-     3. The license server (a third-party proxy this app doesn't control)
-        actually granting a license to a browser request. These were built
-        for Kodi and don't send CORS headers a browser will accept — TVNZ's
-        (c.mjh.nz, redirecting to switch.tv) only allows switch.tv's own
-        origin — so licence requests go through the site's CORS proxy
-        Worker (workers/cors-proxy) instead. The manifest and segments are
-        still fetched directly: TVNZ geo-blocks them to NZ, and the Worker
-        doesn't run from there. */
-const DRM_LICENSE_PROXY = "https://bingqilin-cors-proxy.bingqilin.workers.dev/?url=";
+     3. The servers letting this page read what they send. These channels
+        were listed for Kodi, and TVNZ's manifest, segments and licence
+        servers only allow TVNZ's own pages — Chrome receives them and then
+        refuses to hand them over. The site's extension adds the header
+        that allows it (extension/rules/live-cors.json) and marks the page
+        with data-bq-live-cors, which is how a failure here can say
+        "install the extension" rather than something vaguer. */
+function drmFailureText(err) {
+  const blocked = err && err.category === shaka.util.Error.Category.NETWORK;
+  if (blocked && !document.documentElement.dataset.bqLiveCors) {
+    return "This channel's servers only let their own site read the stream. Install the Bingqilin extension (Settings on the Media page) in Chrome or Edge to play it here.";
+  }
+  return describeShakaError(err);
+}
 async function loadDrmStream(channel, mediaEl, { onReady, onFail } = {}) {
   destroyHls();
   destroyShaka();
@@ -1771,13 +1776,9 @@ async function loadDrmStream(channel, mediaEl, { onReady, onFail } = {}) {
 
   player.addEventListener("error", e => {
     console.error("Shaka runtime error", e.detail);
-    reportOnce("Playback stopped: " + describeShakaError(e.detail));
+    reportOnce("Playback stopped: " + drmFailureText(e.detail));
   });
   player.configure({ drm: { servers: { "com.widevine.alpha": channel.licenseUrl } } });
-  player.getNetworkingEngine().registerRequestFilter((type, request) => {
-    if (type !== shaka.net.NetworkingEngine.RequestType.LICENSE) return;
-    request.uris = request.uris.map(u => u.startsWith(DRM_LICENSE_PROXY) ? u : DRM_LICENSE_PROXY + encodeURIComponent(u));
-  });
 
   try {
     await player.attach(mediaEl);
@@ -1789,7 +1790,7 @@ async function loadDrmStream(channel, mediaEl, { onReady, onFail } = {}) {
   } catch (err) {
     console.error("Shaka load failed", err);
     if (currentShaka === player) currentShaka = null;
-    reportOnce("Couldn't load this DRM-protected channel: " + describeShakaError(err));
+    reportOnce("Couldn't load this DRM-protected channel: " + drmFailureText(err));
   }
 }
 
