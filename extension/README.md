@@ -187,6 +187,15 @@ inside such a frame (sign-in, redirects). TVNZ's page CSP is only that
 `frame-ancestors` line, so removing the header drops nothing else. Pages
 opened as tabs are untouched.
 
+On a phone or tablet TVNZ's web player won't start at all: it shows
+"Open or Download the TVNZ+ App" instead, deciding from
+`navigator.userAgent` (and `maxTouchPoints` on a Mac user agent).
+`content/tvnz-desktop.js` runs in the frame's own world before TVNZ's
+scripts and presents it as the same browser on desktop, as the browser's
+"Desktop site" option would. It does nothing in a TVNZ tab, in TVNZ
+framed by any other site, or on a desktop browser. Running in the main
+world from the manifest needs Chrome 111.
+
 `content/tvnz-frame.js` marks live.html with `data-bq-tvnz-frame`. Without
 it, live.html offers TVNZ's site in a new tab instead of a frame that
 would only show "refused to connect".
@@ -266,6 +275,7 @@ works everywhere, which is why that is still listed first above.
 - `content/no-popup-gate.js` — undoes both outside a player tab
 - `content/tvnz-frame.js` — tells live.html it can frame TVNZ's player
 - `rules/tvnz-frame.json` — the header rule that lets it be framed
+- `content/tvnz-desktop.js` — keeps TVNZ's player from sending phones to its app
 - `lib/scope.js` — the path allow-list that defines "the player"
 - `../.github/workflows/package-extension.yml` — build and release
 - `../.github/scripts/pack-crx.mjs` — the CRX3 writer
