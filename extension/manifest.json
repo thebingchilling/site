@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Bingqilin Popup Blocker",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Closes the popups and tab-unders that the Bingqilin player's video embeds open, and lets Live TV play the TVNZ channels. Runs on the player only — never on the tools pages or anywhere else.",
   "minimum_chrome_version": "102",
 
@@ -24,14 +24,12 @@
     "https://*.switch.tv/*"
   ],
 
-  "_comment_dnr": "Live TV only: lets live.html read the TVNZ channels' manifest, segments and licence, which those servers otherwise only let TVNZ's own pages read. See rules/live-cors.json and content/live-cors.js.",
   "declarative_net_request": {
     "rule_resources": [
       { "id": "live_cors", "enabled": true, "path": "rules/live-cors.json" }
     ]
   },
 
-  "_comment_optional": "Granted per source origin at runtime, on one click. Nothing is granted at install, and no source domain is written here — they are read from the player's own configuration and change whenever you rotate them.",
   "optional_host_permissions": ["*://*/*"],
 
   "action": { "default_title": "Bingqilin Popup Blocker" },
