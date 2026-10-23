@@ -174,21 +174,22 @@ recording no opener and so no match at all.
 ## Live TV: the TVNZ channels
 
 Not popups at all, but it needs an extension too. TVNZ 1, TVNZ 2 and DUKE
-are Widevine DASH streams whose manifest, segments and licence servers
-only let TVNZ's own pages read them: Chrome receives the bytes and then
-refuses to hand them to live.html. `rules/live-cors.json` is a
-declarativeNetRequest rule that sets `Access-Control-Allow-Origin: *` on
-those responses, only for requests this site makes. Everything is still
-fetched straight from TVNZ on the viewer's own connection, so the NZ
-geo-block applies as normal and there is no proxy in the middle.
+are Widevine-protected, and TVNZ's licence server only lets a browser
+play them with a ticket issued to a signed-in TVNZ+ account, which only
+TVNZ's own player asks for. So live.html shows that player,
+`www.tvnz.co.nz/player/channel/<id>`, in a frame.
 
-`content/live-cors.js` marks live.html with `data-bq-live-cors`, so a DRM
-channel that fails to load can tell the viewer to install the extension
-instead of showing a bare network error.
+TVNZ forbids being framed: its pages send `X-Frame-Options: SAMEORIGIN`
+and `Content-Security-Policy: frame-ancestors 'self'`.
+`rules/tvnz-frame.json` is a declarativeNetRequest rule that removes both
+from TVNZ responses loaded as frames by this site, or by TVNZ's own pages
+inside such a frame (sign-in, redirects). TVNZ's page CSP is only that
+`frame-ancestors` line, so removing the header drops nothing else. Pages
+opened as tabs are untouched.
 
-The `*` rather than this site's origin is deliberate: the manifest is
-reached through a cross-origin redirect (i.mjh.nz → TVNZ), after which
-Chrome sends `Origin: null`, which a named origin would not match.
+`content/tvnz-frame.js` marks live.html with `data-bq-tvnz-frame`. Without
+it, live.html offers TVNZ's site in a new tab instead of a frame that
+would only show "refused to connect".
 
 ## Building a .crx
 
@@ -257,14 +258,14 @@ works everywhere, which is why that is still listed first above.
 
 ## Files
 
-- `manifest.json` — MV3; `webNavigation` + `storage` + `declarativeNetRequest`, host permissions for this site and the TVNZ channels' servers
+- `manifest.json` — MV3; `webNavigation` + `storage` + `declarativeNetRequest`, host permissions for this site and tvnz.co.nz
 - `background.js` — the three rules
 - `content/keepalive.js` — keeps the worker resident, reports source origins
 - `content/no-popup.js` — the decoy window and the target cancelling,
   injected into granted sources
 - `content/no-popup-gate.js` — undoes both outside a player tab
-- `content/live-cors.js` — tells live.html the TVNZ channels can be read
-- `rules/live-cors.json` — the header rule that lets them be read
+- `content/tvnz-frame.js` — tells live.html it can frame TVNZ's player
+- `rules/tvnz-frame.json` — the header rule that lets it be framed
 - `lib/scope.js` — the path allow-list that defines "the player"
 - `../.github/workflows/package-extension.yml` — build and release
 - `../.github/scripts/pack-crx.mjs` — the CRX3 writer

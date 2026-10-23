@@ -1,4 +1,4 @@
-# Vendored: the two live-TV playback engines
+# Vendored: the live-TV playback engine
 
 Vendored (not fetched from a CDN at runtime) so `/live` works without
 depending on a third-party script host.
@@ -6,29 +6,25 @@ depending on a third-party script host.
 - `hls.min.js` — plays HLS (`.m3u8`) channels in browsers with no native
   support. Source: [`video-dev/hls.js`](https://github.com/video-dev/hls.js)
   `1.5.17`, npm `dist/hls.min.js`, Apache-2.0.
-- `shaka-player.compiled.js` — plays the DRM (Widevine) channels.
-  Source: [`shaka-project/shaka-player`](https://github.com/shaka-project/shaka-player)
-  `4.16.3`, npm `dist/shaka-player.compiled.js`, Apache-2.0.
 
-To update: `npm pack hls.js@<version>` (or `shaka-player@<version>`),
-extract the file named above from `package/dist/`, and bump the version
-here. Nothing else references the version.
+To update: `npm pack hls.js@<version>`, extract the file named above
+from `package/dist/`, and bump the version here. Nothing else references
+the version.
 
-These two sit in `/shared/vendor/` rather than beside `live.html` because
+It sits in `/shared/vendor/` rather than beside `live.html` because
 a `live/` directory would collide with the extensionless `/live` URL that
 GitHub Pages serves `live.html` from — which the bottom navigation, the
 service worker's precache list and the popup blocker's scope check all
 rely on.
 
-They are deliberately **not** in the service worker's `SHELL_URLS`:
-together they are over a megabyte, and most visitors never open `/live`.
-The `/shared/` rule in `sw.js` caches them stale-while-revalidate on
-first use instead, which is the same treatment the tools' own vendored
-engines get.
+It is deliberately **not** in the service worker's `SHELL_URLS`: most
+visitors never open `/live`. The `/shared/` rule in `sw.js` caches it
+stale-while-revalidate on first use instead, which is the same
+treatment the tools' own vendored engines get.
 
 ## Why not a CDN with an integrity hash
 
-They were loaded from cdnjs, with no `integrity` attribute, in the
+The engines were loaded from cdnjs, with no `integrity` attribute, in the
 `<head>` of `live.html`. That put a third party in a position to run
 script on this origin — the same origin whose `localStorage` the
 authenticator keeps its TOTP secrets in, unencrypted, by design.

@@ -1,14 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   Tell live.html the TVNZ channels can be read.
+   Tell live.html it can show TVNZ's player in a frame.
 
-   Their manifest, segments and licence come from servers that only let
-   TVNZ's own pages read them, so a browser on this site is refused.
-   rules/live-cors.json adds the header that lets live.html read them;
-   this marks the page so it can tell "install the extension" apart from
-   any other reason a DRM channel failed to load.
+   TVNZ forbids being framed, so without this extension the frame shows
+   only Chrome's "refused to connect". rules/tvnz-frame.json removes the
+   two headers that forbid it, for frames this site opens; this marks the
+   page so it knows to use the frame rather than offer TVNZ's site in a
+   new tab.
 
    Isolated world, so the only thing shared with the page is the DOM: one
    attribute on <html>, set before any of the page's scripts run.
    ═══════════════════════════════════════════════════════════════════════ */
 
-document.documentElement.dataset.bqLiveCors = "1";
+document.documentElement.dataset.bqTvnzFrame = "1";

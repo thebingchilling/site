@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "X-Frame-Options", "operation": "remove" },
+        { "header": "Content-Security-Policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "initiatorDomains": ["thebingchilling.github.io", "tvnz.co.nz"],
+      "requestDomains": ["tvnz.co.nz"],
+      "resourceTypes": ["sub_frame"]
+    }
+  }
+]

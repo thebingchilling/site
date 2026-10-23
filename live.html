@@ -46,7 +46,6 @@
        because neither engine is touched until a channel is actually
        played, and they were blocking first paint on over a megabyte. -->
   <script src="/shared/vendor/hls.min.js" defer></script>
-  <script src="/shared/vendor/shaka-player.compiled.js" defer></script>
   <style>
     /* Page-specific only. Colour, type, shape and motion come from
        /shared/tokens.css; the app shell from /shared/chrome.css;
@@ -347,10 +346,14 @@
     .grid-section-label .material-icons { font-size: 16px; }
 
     /* ── DRM channels ──────────────────────────────────────────────────
-       Ones without a licence URL can't be played here, but stay
-       clickable: tapping one opens its programme guide instead. Ones with
-       a licence URL play like any other channel and just keep the badge. */
+       Can't be played here, but stay clickable: tapping one opens its
+       programme guide instead. The TVNZ ones are the exception — they
+       open TVNZ's own player in a frame (see tvnzPlayerUrl) and just keep
+       the badge. */
     .media-card--drm { opacity: 0.62; cursor: pointer; }
+    /* TVNZ's player is a whole page, not a 16:9 video. */
+    .player-wrap--embed { padding-top: 0; height: min(80vh, 860px); min-height: 420px; background: var(--bg); }
+    .player-wrap--embed video { display: none; }
     .media-card--drm .media-card__pin { display: none; }
     .media-card__drm-badge,
     .media-card__drm-guide-hint {
@@ -668,6 +671,7 @@
           <span id="playerOverlayText">Loading stream…</span>
         </div>
         <video id="videoEl" controls playsinline></video>
+        <iframe id="embedFrame" class="hidden" title="TVNZ player" allow="encrypted-media; autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
       </div>
 
       <div id="radioPlayerWrap" class="radio-player hidden">
@@ -971,9 +975,9 @@ function togglePin(kind, id) {
      #KODIPROP:inputstream.adaptive.license_key=https://license.example/proxy
      https://stream.example/master.m3u8
    #KODIPROP lines (a common IPTV-playlist convention) mark the channel
-   directly above the URL as DRM-protected; those with a licence URL are
-   played through Shaka (see loadDrmStream), the rest are shown greyed out
-   in the grid (see renderGrid) as guide-only. */
+   directly above the URL as DRM-protected. This page doesn't play DRM, so
+   those are shown greyed out in the grid (see renderGrid) as guide-only,
+   apart from TVNZ's, which open TVNZ's own player (see tvnzPlayerUrl). */
 function parseM3U8(text, kind) {
   const lines = String(text || "").split(/\r?\n/);
   const channels = [];
@@ -1016,15 +1020,12 @@ function parseM3U8(text, kind) {
     if (!pending) pending = { attrs: {}, name: "" };
     const attrs = pending.attrs;
     const id = attrs["tvg-id"] || attrs["tvg-name"] || `${kind}-${autoIdx++}-${url}`;
-    const isDrm = !!(pendingDrm && pendingDrm.type);
-    const licenseUrl = isDrm && pendingDrm.key && /^https?:\/\//i.test(pendingDrm.key) ? pendingDrm.key.split("|")[0] : null;
     channels.push({
       id,
       name: pending.name || "Unknown channel",
       attrs: { "tvg-logo": attrs["tvg-logo"] || "", "tvg-chno": attrs["tvg-chno"] || "" },
       url,
-      drm: isDrm,
-      licenseUrl
+      drm: !!(pendingDrm && pendingDrm.type)
     });
     pending = null; pendingDrm = null;
   }
@@ -1067,8 +1068,7 @@ function parseChannelsJSON(text, kind) {
       name,
       attrs: { "tvg-logo": logo, "tvg-chno": chnoStr },
       url,
-      drm: isDrm,
-      licenseUrl: isDrm ? (licenseUrl || null) : null
+      drm: isDrm
     });
   }
   const chno = c => (c.attrs["tvg-chno"] !== "" ? Number(c.attrs["tvg-chno"]) : Infinity);
@@ -1368,10 +1368,8 @@ function renderGrid() {
     if (showSections && i === pinnedCount) sectionLabel = `<div class="grid-section-label">All channels</div>`;
 
     let nowHtml = "", progressHtml = "";
-    // DRM with a licence URL (e.g. the TVNZ channels in i.mjh.nz/nz) is
-    // played through Shaka; DRM without one has nothing to ask for a
-    // licence, so it stays guide-only.
-    const guideOnly = c.drm && !c.licenseUrl;
+    // DRM channels are guide-only, except TVNZ's, which open TVNZ's player.
+    const guideOnly = c.drm && !tvnzPlayerUrl(c);
     if (kind === "tv" && !guideOnly) {
       const nn = nowNextFor(c.id);
       if (nn && nn.current) {
@@ -1668,7 +1666,7 @@ const audioEl = $("audioEl");
 const radioPlayBtn = $("radioPlayBtn");
 const radioPlayIcon = $("radioPlayIcon");
 const playerOverlay = $("playerOverlay");
-let currentShaka = null;
+const embedFrame = $("embedFrame");
 
 function setRadioPlayIcon(playing) {
   radioPlayIcon.textContent = playing ? "pause" : "play_arrow";
@@ -1685,127 +1683,55 @@ function destroyHls() {
   if (currentHls) { try { currentHls.destroy(); } catch (e) {} currentHls = null; }
 }
 
-function destroyShaka() {
-  if (currentShaka) { try { currentShaka.destroy(); } catch (e) {} currentShaka = null; }
-}
-
 function stopAllPlayback() {
   if (typeof clearReconnect === "function") clearReconnect();
   destroyHls();
-  destroyShaka();
+  stopEmbed();
   videoEl.pause(); videoEl.removeAttribute("src"); try { videoEl.load(); } catch (e) {}
   audioEl.pause(); audioEl.removeAttribute("src"); try { audioEl.load(); } catch (e) {}
 }
 
-/* Turn a Shaka numeric error code/category into its human-readable enum
-   name (e.g. 1002 -> "HTTP_ERROR"), so failures are actually diagnosable
-   instead of a generic "something went wrong". */
-function shakaEnumName(map, val) {
-  for (const k in map) { if (map[k] === val) return k; }
-  return String(val);
+/* ═══════════ TVNZ channels ═══════════
+   TVNZ 1, TVNZ 2 and DUKE are Widevine-protected, and their licence server
+   only grants a browser a licence through a ticket issued to a signed-in
+   TVNZ+ account — which only TVNZ's own player asks for. So they open
+   that player, at www.tvnz.co.nz/player/channel/<id>, in a frame.
+
+   TVNZ forbids framing (X-Frame-Options and a frame-ancestors CSP); the
+   site's extension removes both for frames this site opens
+   (extension/rules/tvnz-frame.json) and marks the page with
+   data-bq-tvnz-frame. Without it the frame would only show Chrome's
+   "refused to connect", so the player offers TVNZ's site in a new tab. */
+function tvnzPlayerUrl(channel) {
+  const m = /(?:^|[^a-z0-9])tvnz-(1|2|duke)$/i.exec(channel.id || "");
+  return m ? `https://www.tvnz.co.nz/player/channel/tvnz-${m[1].toLowerCase()}` : null;
 }
 
-function describeShakaError(err) {
-  if (!err || typeof err.code !== "number") return err && err.message ? err.message : String(err);
-  const cat = shakaEnumName(shaka.util.Error.Category, err.category);
-  const code = shakaEnumName(shaka.util.Error.Code, err.code);
-  let extra = "";
-  try { extra = err.data && err.data.length ? " — " + err.data.map(d => (typeof d === "string" ? d : JSON.stringify(d))).join(", ") : ""; } catch (e) {}
-  return `[${cat}/${code}]${extra}`;
+function stopEmbed() {
+  if (embedFrame.getAttribute("src")) embedFrame.src = "about:blank";
+  embedFrame.removeAttribute("src");
+  embedFrame.onload = null;
+  embedFrame.classList.add("hidden");
+  $("tvPlayerWrap").classList.remove("player-wrap--embed");
 }
 
-/* Widevine DASH channels (manifest: "mpd" + license_url) are played back with
-   Shaka Player, which handles MSE/DASH parsing and the EME Widevine license
-   exchange for us. Three separate things have to line up for this to work,
-   and we check them in order so failures are actually diagnosable:
-     1. Secure context — EME is spec'd to refuse to run over plain file:// or
-        http://, so this app must be served over https:// (or http://localhost)
-        for DRM playback to even be attempted.
-     2. A Widevine CDM in the browser — Chrome/Edge/Firefox/Android have one;
-        Safari/iOS use FairPlay instead and can never do this.
-     3. The servers letting this page read what they send. These channels
-        were listed for Kodi, and TVNZ's manifest, segments and licence
-        servers only allow TVNZ's own pages — Chrome receives them and then
-        refuses to hand them over. The site's extension adds the header
-        that allows it (extension/rules/live-cors.json) and marks the page
-        with data-bq-live-cors, which is how a failure here can say
-        "install the extension" rather than something vaguer. */
-/* Licence servers that refuse a challenge unless the client ID inside it is
-   encrypted ("privacy mode"), and the service certificate to encrypt it
-   with. TVNZ's is Google's own license.widevine.com one — the same file
-   TVNZ's web player loads — and the server answers a plain challenge with
-   INVALID_LICENSE_CHALLENGE. Matched on the licence URL, since another
-   server would reject a certificate that isn't its own. */
-const WIDEVINE_SERVER_CERTS = [
-  { licence: /^https:\/\/c\.mjh\.nz\/tvnz-/, uri: "https://storage.googleapis.com/wvmedia/cert/cert_license_widevine_com_prod.bin" }
-];
-
-function drmFailureText(err) {
-  const blocked = err && err.category === shaka.util.Error.Category.NETWORK;
-  if (blocked && !document.documentElement.dataset.bqLiveCors) {
-    return "This channel's servers only let their own site read the stream. Install the Bingqilin extension (Settings on the Media page) in Chrome or Edge to play it here.";
-  }
-  return describeShakaError(err);
-}
-async function loadDrmStream(channel, mediaEl, { onReady, onFail } = {}) {
-  destroyHls();
-  destroyShaka();
-
-  if (!window.isSecureContext) {
-    if (onFail) onFail("DRM playback needs this page to be served over https:// (or http://localhost) — it won't work opened directly from a file, or over plain http:// on a remote host.");
+function playEmbed(channel) {
+  const url = tvnzPlayerUrl(channel);
+  if (!document.documentElement.dataset.bqTvnzFrame) {
+    $("playerOverlayText").textContent = "TVNZ's player can't open here without the extension.";
+    const err = $("playerError");
+    err.textContent = "Install the Bingqilin extension (Settings on the Media page) in Chrome or Edge to watch it here, or ";
+    const link = document.createElement("a");
+    link.href = url; link.target = "_blank"; link.rel = "noopener";
+    link.textContent = "watch on TVNZ+";
+    err.append(link, ".");
+    err.classList.remove("hidden");
     return;
   }
-  if (!window.shaka) { if (onFail) onFail("The DRM playback engine (Shaka Player) didn't load. Reload the page — if it keeps happening, something is blocking scripts on this site."); return; }
-  shaka.polyfill.installAll();
-
-  if (!shaka.Player.isBrowserSupported()) {
-    if (onFail) onFail("This browser doesn't support the MSE/EME APIs this channel needs. Try a recent Chrome, Edge, or Firefox.");
-    return;
-  }
-
-  // Quick, isolated check for an actual Widevine CDM before touching Shaka or
-  // the license server at all — narrows "it doesn't work" down to "your
-  // browser/OS has no Widevine" vs. "the license server said no".
-  if (navigator.requestMediaKeySystemAccess) {
-    try {
-      await navigator.requestMediaKeySystemAccess("com.widevine.alpha", [{
-        initDataTypes: ["cenc"],
-        videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }],
-        audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }]
-      }]);
-    } catch (e) {
-      if (onFail) onFail("This browser/device doesn't have Widevine available (common in Linux Firefox without the CDM installed, private/incognito windows, or Brave with Widevine off). Try Chrome or Edge with Widevine enabled.");
-      return;
-    }
-  }
-
-  const player = new shaka.Player();
-  currentShaka = player;
-  let reported = false;
-  const reportOnce = (msg) => { if (!reported) { reported = true; if (onFail) onFail(msg); } };
-
-  player.addEventListener("error", e => {
-    console.error("Shaka runtime error", e.detail);
-    reportOnce("Playback stopped: " + drmFailureText(e.detail));
-  });
-  const cert = WIDEVINE_SERVER_CERTS.find(c => c.licence.test(channel.licenseUrl));
-  player.configure({ drm: {
-    servers: { "com.widevine.alpha": channel.licenseUrl },
-    advanced: cert ? { "com.widevine.alpha": { serverCertificateUri: cert.uri } } : {}
-  } });
-
-  try {
-    await player.attach(mediaEl);
-    await player.load(channel.url);
-    if (currentShaka !== player) return; // superseded by a newer load
-    if (onReady) onReady();
-    const p = mediaEl.play();
-    if (p && p.catch) p.catch(() => {});
-  } catch (err) {
-    console.error("Shaka load failed", err);
-    if (currentShaka === player) currentShaka = null;
-    reportOnce("Couldn't load this DRM-protected channel: " + drmFailureText(err));
-  }
+  $("tvPlayerWrap").classList.add("player-wrap--embed");
+  embedFrame.onload = () => { if (channel === currentPlayerChannel) playerOverlay.classList.add("hidden"); };
+  embedFrame.classList.remove("hidden");
+  embedFrame.src = url;
 }
 
 function loadStream(url, mediaEl, { onWaiting, onReady, onFail, onReconnecting } = {}) {
@@ -2100,8 +2026,8 @@ function pushPlayerEntry() {
 }
 
 function openPlayer(channel) {
-  // Nothing to ask for a licence (reachable from guide search results).
-  if (channel.drm && !channel.licenseUrl) { openGuideModal(channel); return; }
+  // Guide-only (reachable from guide search results).
+  if (channel.drm && !tvnzPlayerUrl(channel)) { openGuideModal(channel); return; }
   const isTv = state.tab === "tv" || channel.drm;
   playingIsTv = isTv;
   hideMiniPlayer();
@@ -2111,7 +2037,7 @@ function openPlayer(channel) {
     $("viewPlayer").classList.add("view--active");
   });
   $("backFromPlayerLabel").textContent = isTv ? "TV" : "Radio";
-  $("pipBtn").classList.toggle("hidden", !isTv || !document.pictureInPictureEnabled);
+  $("pipBtn").classList.toggle("hidden", !isTv || channel.drm || !document.pictureInPictureEnabled);
 
   $("playerTitle").textContent = channel.name;
   const bits = [];
@@ -2185,33 +2111,15 @@ function scheduleReconnect(channel) {
 // reconnect can re-run just this part without touching the UI around it.
 function startChannelPlayback(channel, isRetry) {
   const mediaEl = playingIsTv ? videoEl : audioEl;
-  if (isRetry) { destroyHls(); destroyShaka(); try { mediaEl.pause(); } catch (e) {} }
+  if (isRetry) { destroyHls(); try { mediaEl.pause(); } catch (e) {} }
   if (!isRetry) clearReconnect();
 
   if (playingIsTv) {
     playerOverlay.classList.remove("hidden");
-    if (!isRetry) $("playerOverlayText").textContent = channel.drm ? "Loading DRM stream…" : "Loading stream…";
+    if (!isRetry) $("playerOverlayText").textContent = channel.drm ? "Loading TVNZ's player…" : "Loading stream…";
   }
 
-  if (channel.drm) {
-    // Shaka retries network hiccups itself; what reaches onFail is a
-    // missing CDM, a refused licence or a geo-block — not worth retrying.
-    loadDrmStream(channel, videoEl, {
-      onReady: () => playerOverlay.classList.add("hidden"),
-      onFail: (msg) => {
-        if (channel !== currentPlayerChannel) return;
-        // Cancel a pending retry but keep the count, so a stream that
-        // errors the <video> on every attempt still hits RECONNECT_MAX.
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-        playerOverlay.classList.remove("hidden");
-        $("playerOverlayText").textContent = "Couldn't load this channel.";
-        $("playerError").textContent = msg || "This channel couldn't be played in your browser.";
-        $("playerError").classList.remove("hidden");
-      }
-    });
-    return;
-  }
+  if (channel.drm) { playEmbed(channel); return; }
 
   loadStream(channel.url, mediaEl, {
     onReady: () => { if (playingIsTv) playerOverlay.classList.add("hidden"); },
@@ -2338,7 +2246,9 @@ function exitPlayerView() {
   if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
   // Minimize into the mini-player (keep playing) unless nothing actually
   // loaded, or it errored out — nothing worth keeping around in that case.
-  const keepPlaying = currentPlayerChannel && $("playerError").classList.contains("hidden");
+  // TVNZ's player lives in the player view and can't be driven from the
+  // mini-player, so it always stops.
+  const keepPlaying = currentPlayerChannel && !currentPlayerChannel.drm && $("playerError").classList.contains("hidden");
   switchView(() => {
     $("viewPlayer").classList.remove("view--active");
     $("viewBrowse").classList.add("view--active");
