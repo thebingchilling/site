@@ -347,8 +347,9 @@
     .grid-section-label .material-icons { font-size: 16px; }
 
     /* ── DRM channels ──────────────────────────────────────────────────
-       Can't be played here, but still clickable: tapping one opens its
-       programme guide instead of attempting playback. */
+       Ones without a licence URL can't be played here, but stay
+       clickable: tapping one opens its programme guide instead. Ones with
+       a licence URL play like any other channel and just keep the badge. */
     .media-card--drm { opacity: 0.62; cursor: pointer; }
     .media-card--drm .media-card__pin { display: none; }
     .media-card__drm-badge,
@@ -970,9 +971,9 @@ function togglePin(kind, id) {
      #KODIPROP:inputstream.adaptive.license_key=https://license.example/proxy
      https://stream.example/master.m3u8
    #KODIPROP lines (a common IPTV-playlist convention) mark the channel
-   directly above the URL as DRM-protected; those channels are shown
-   greyed out in the grid (see renderGrid) since arbitrary third-party
-   license servers frequently won't grant a browser a licence anyway. */
+   directly above the URL as DRM-protected; those with a licence URL are
+   played through Shaka (see loadDrmStream), the rest are shown greyed out
+   in the grid (see renderGrid) as guide-only. */
 function parseM3U8(text, kind) {
   const lines = String(text || "").split(/\r?\n/);
   const channels = [];
@@ -1367,7 +1368,11 @@ function renderGrid() {
     if (showSections && i === pinnedCount) sectionLabel = `<div class="grid-section-label">All channels</div>`;
 
     let nowHtml = "", progressHtml = "";
-    if (kind === "tv" && !c.drm) {
+    // DRM with a licence URL (e.g. the TVNZ channels in i.mjh.nz/nz) is
+    // played through Shaka; DRM without one has nothing to ask for a
+    // licence, so it stays guide-only.
+    const guideOnly = c.drm && !c.licenseUrl;
+    if (kind === "tv" && !guideOnly) {
       const nn = nowNextFor(c.id);
       if (nn && nn.current) {
         nowHtml = `<div class="media-card__now">${escapeHtml(nn.current.title)}</div>`;
@@ -1376,21 +1381,19 @@ function renderGrid() {
       }
     }
 
-    // DRM-protected channels can't be played here — third-party Widevine
-    // license servers referenced by arbitrary imported playlists frequently
-    // won't grant a browser a licence — but the card stays clickable so the
-    // programme guide (EPG) is still reachable; it just opens the guide
-    // modal directly instead of attempting playback.
-    const drmLabel = c.drm ? ` — DRM protected, can't be played here, shows programme guide` : "";
+    // Guide-only channels stay clickable so the programme guide (EPG) is
+    // still reachable; they just open the guide modal directly instead of
+    // attempting playback.
+    const drmLabel = guideOnly ? ` — DRM protected, can't be played here, shows programme guide` : c.drm ? " — DRM protected" : "";
 
     return `${sectionLabel}
-      <div class="media-card ${c.drm ? "media-card--drm" : ""}" tabindex="0" role="listitem" data-idx="${i}" data-cid="${escapeAttr(c.id)}" aria-label="${escapeHtml(c.name)}${drmLabel}">
+      <div class="media-card ${guideOnly ? "media-card--drm" : ""}" tabindex="0" role="listitem" data-idx="${i}" data-cid="${escapeAttr(c.id)}" aria-label="${escapeHtml(c.name)}${drmLabel}">
         <div class="media-card__img-wrap">
           ${chno ? `<span class="media-card__badge">${escapeHtml(chno)}</span>` : ""}
           ${c.drm ? `<span class="media-card__drm-badge"><span class="material-icons" aria-hidden="true">lock</span>DRM</span>` : ""}
           ${logo ? `<img class="media-card__img" loading="lazy" src="${escapeAttr(logo)}" alt="" onerror="this.remove()" />` : ""}
           <div class="media-card__placeholder"><span class="material-icons" aria-hidden="true">${icon}</span></div>
-          ${c.drm ? `<span class="media-card__drm-guide-hint"><span class="material-icons" aria-hidden="true">calendar_month</span>Guide</span>` : `<button class="media-card__pin ${isPinned ? "media-card__pin--active" : ""}" type="button" data-pin-idx="${i}" data-channel-id="${escapeAttr(c.id)}" aria-pressed="${isPinned}" aria-label="${isPinned ? "Unpin" : "Pin"} ${escapeHtml(c.name)}">
+          ${guideOnly ? `<span class="media-card__drm-guide-hint"><span class="material-icons" aria-hidden="true">calendar_month</span>Guide</span>` : `<button class="media-card__pin ${isPinned ? "media-card__pin--active" : ""}" type="button" data-pin-idx="${i}" data-channel-id="${escapeAttr(c.id)}" aria-pressed="${isPinned}" aria-label="${isPinned ? "Unpin" : "Pin"} ${escapeHtml(c.name)}">
             <span class="material-icons" aria-hidden="true">push_pin</span>
           </button>`}
           ${progressHtml}
@@ -1409,7 +1412,7 @@ function renderGrid() {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); card.click(); }
     });
   });
-  // DRM channels can't be played, but tapping/activating one opens its
+  // Guide-only DRM channels can't be played, but tapping/activating one opens its
   // programme guide (EPG) — same modal as the "Full guide" button in the
   // normal player view, just reachable straight from the grid.
   grid.querySelectorAll(".media-card--drm").forEach(card => {
@@ -1721,8 +1724,14 @@ function describeShakaError(err) {
      2. A Widevine CDM in the browser — Chrome/Edge/Firefox/Android have one;
         Safari/iOS use FairPlay instead and can never do this.
      3. The license server (a third-party proxy this app doesn't control)
-        actually granting a license to a browser request — it was built for
-        Kodi, so there's a real chance it 403s or blocks CORS for us. */
+        actually granting a license to a browser request. These were built
+        for Kodi and don't send CORS headers a browser will accept — TVNZ's
+        (c.mjh.nz, redirecting to switch.tv) only allows switch.tv's own
+        origin — so licence requests go through the site's CORS proxy
+        Worker (workers/cors-proxy) instead. The manifest and segments are
+        still fetched directly: TVNZ geo-blocks them to NZ, and the Worker
+        doesn't run from there. */
+const DRM_LICENSE_PROXY = "https://bingqilin-cors-proxy.bingqilin.workers.dev/?url=";
 async function loadDrmStream(channel, mediaEl, { onReady, onFail } = {}) {
   destroyHls();
   destroyShaka();
@@ -1765,6 +1774,10 @@ async function loadDrmStream(channel, mediaEl, { onReady, onFail } = {}) {
     reportOnce("Playback stopped: " + describeShakaError(e.detail));
   });
   player.configure({ drm: { servers: { "com.widevine.alpha": channel.licenseUrl } } });
+  player.getNetworkingEngine().registerRequestFilter((type, request) => {
+    if (type !== shaka.net.NetworkingEngine.RequestType.LICENSE) return;
+    request.uris = request.uris.map(u => u.startsWith(DRM_LICENSE_PROXY) ? u : DRM_LICENSE_PROXY + encodeURIComponent(u));
+  });
 
   try {
     await player.attach(mediaEl);
@@ -2072,7 +2085,9 @@ function pushPlayerEntry() {
 }
 
 function openPlayer(channel) {
-  const isTv = state.tab === "tv";
+  // Nothing to ask for a licence (reachable from guide search results).
+  if (channel.drm && !channel.licenseUrl) { openGuideModal(channel); return; }
+  const isTv = state.tab === "tv" || channel.drm;
   playingIsTv = isTv;
   hideMiniPlayer();
   pushPlayerEntry();
@@ -2099,22 +2114,6 @@ function openPlayer(channel) {
   $("tvPlayerWrap").classList.toggle("hidden", !isTv);
   $("radioPlayerWrap").classList.toggle("hidden", isTv);
   $("playerError").classList.add("hidden");
-
-  if (channel.drm) {
-    $("tvPlayerWrap").classList.remove("hidden");
-    $("radioPlayerWrap").classList.add("hidden");
-    playerOverlay.classList.remove("hidden");
-    $("playerOverlayText").textContent = "Loading DRM stream…";
-    loadDrmStream(channel, videoEl, {
-      onReady: () => playerOverlay.classList.add("hidden"),
-      onFail: (msg) => {
-        $("playerOverlayText").textContent = "Couldn't load this channel.";
-        $("playerError").textContent = msg || "This channel couldn't be played in your browser.";
-        $("playerError").classList.remove("hidden");
-      }
-    });
-    return;
-  }
 
   if (!isTv) {
     const logo = safeUrl(channel.attrs["tvg-logo"]);
@@ -2176,7 +2175,27 @@ function startChannelPlayback(channel, isRetry) {
 
   if (playingIsTv) {
     playerOverlay.classList.remove("hidden");
-    if (!isRetry) $("playerOverlayText").textContent = "Loading stream…";
+    if (!isRetry) $("playerOverlayText").textContent = channel.drm ? "Loading DRM stream…" : "Loading stream…";
+  }
+
+  if (channel.drm) {
+    // Shaka retries network hiccups itself; what reaches onFail is a
+    // missing CDM, a refused licence or a geo-block — not worth retrying.
+    loadDrmStream(channel, videoEl, {
+      onReady: () => playerOverlay.classList.add("hidden"),
+      onFail: (msg) => {
+        if (channel !== currentPlayerChannel) return;
+        // Cancel a pending retry but keep the count, so a stream that
+        // errors the <video> on every attempt still hits RECONNECT_MAX.
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+        playerOverlay.classList.remove("hidden");
+        $("playerOverlayText").textContent = "Couldn't load this channel.";
+        $("playerError").textContent = msg || "This channel couldn't be played in your browser.";
+        $("playerError").classList.remove("hidden");
+      }
+    });
+    return;
   }
 
   loadStream(channel.url, mediaEl, {
