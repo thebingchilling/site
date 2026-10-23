@@ -354,6 +354,8 @@
     /* TVNZ's player is a whole page, not a 16:9 video. */
     .player-wrap--embed { padding-top: 0; height: min(80vh, 860px); min-height: 420px; background: var(--bg); }
     .player-wrap--embed video { display: none; }
+    #playerOverlayText { max-width: 34rem; padding: 0 1rem; text-align: center; }
+    #playerOverlayAction .material-icons { font-size: 18px; opacity: 1; }
     .media-card--drm .media-card__pin { display: none; }
     .media-card__drm-badge,
     .media-card__drm-guide-hint {
@@ -669,6 +671,9 @@
         <div id="playerOverlay" class="player-overlay">
           <span class="material-icons" aria-hidden="true">live_tv</span>
           <span id="playerOverlayText">Loading stream…</span>
+          <a id="playerOverlayAction" class="btn btn--primary btn--sm hidden" target="_blank" rel="noopener">
+            <span class="material-icons" aria-hidden="true">open_in_new</span>Watch on TVNZ+
+          </a>
         </div>
         <video id="videoEl" controls playsinline></video>
         <iframe id="embedFrame" class="hidden" title="TVNZ player" allow="encrypted-media; autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
@@ -1712,20 +1717,17 @@ function stopEmbed() {
   embedFrame.removeAttribute("src");
   embedFrame.onload = null;
   embedFrame.classList.add("hidden");
+  $("playerOverlayAction").classList.add("hidden");
   $("tvPlayerWrap").classList.remove("player-wrap--embed");
 }
 
 function playEmbed(channel) {
   const url = tvnzPlayerUrl(channel);
   if (!document.documentElement.dataset.bqTvnzFrame) {
-    $("playerOverlayText").textContent = "TVNZ's player can't open here without the extension.";
-    const err = $("playerError");
-    err.textContent = "Install the Bingqilin extension (Settings on the Media page) in Chrome or Edge to watch it here, or ";
-    const link = document.createElement("a");
-    link.href = url; link.target = "_blank"; link.rel = "noopener";
-    link.textContent = "watch on TVNZ+";
-    err.append(link, ".");
-    err.classList.remove("hidden");
+    $("playerOverlayText").textContent = "TVNZ's player can only open here with the Bingqilin extension — install it from Settings on the Media page, in Chrome or Edge.";
+    const action = $("playerOverlayAction");
+    action.href = url;
+    action.classList.remove("hidden");
     return;
   }
   $("tvPlayerWrap").classList.add("player-wrap--embed");
