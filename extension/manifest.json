@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Bingqilin Popup Blocker",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Closes the popups and tab-unders that the Bingqilin player's video embeds open, and lets Live TV show TVNZ's own player. Runs on the player only — never on the tools pages or anywhere else.",
   "minimum_chrome_version": "111",
 
@@ -45,7 +45,7 @@
     },
     {
       "matches": ["https://www.tvnz.co.nz/*"],
-      "js": ["content/tvnz-desktop.js"],
+      "js": ["content/tvnz-in-frame.js"],
       "all_frames": true,
       "world": "MAIN",
       "run_at": "document_start"

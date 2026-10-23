@@ -674,7 +674,6 @@
           </a>
         </div>
         <video id="videoEl" controls playsinline></video>
-        <iframe id="embedFrame" class="hidden" title="TVNZ player" allow="encrypted-media; autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
       </div>
 
       <div id="radioPlayerWrap" class="radio-player hidden">
@@ -1669,7 +1668,7 @@ const audioEl = $("audioEl");
 const radioPlayBtn = $("radioPlayBtn");
 const radioPlayIcon = $("radioPlayIcon");
 const playerOverlay = $("playerOverlay");
-const embedFrame = $("embedFrame");
+let embedFrame = null;
 
 function setRadioPlayIcon(playing) {
   radioPlayIcon.textContent = playing ? "pause" : "play_arrow";
@@ -1710,11 +1709,21 @@ function tvnzPlayerUrl(channel) {
   return m ? `https://www.tvnz.co.nz/player/channel/tvnz-${m[1].toLowerCase()}` : null;
 }
 
+// ngsw-bypass: TVNZ's service worker (Angular's ngsw) passes this load
+// straight to the network instead of answering it from its own copy, which
+// still carries the headers that forbid framing. See
+// extension/content/tvnz-in-frame.js.
+function tvnzFrameUrl(channel) {
+  return tvnzPlayerUrl(channel) + "?ngsw-bypass=1";
+}
+
+/* A fresh frame per channel, removed on the way out, rather than one frame
+   whose src changes: every change of src after the first is a navigation
+   that Chrome adds to this tab's history, so Back stepped through old
+   frame pages instead of leaving the player. A removed frame takes its
+   history entries with it. */
 function stopEmbed() {
-  if (embedFrame.getAttribute("src")) embedFrame.src = "about:blank";
-  embedFrame.removeAttribute("src");
-  embedFrame.onload = null;
-  embedFrame.classList.add("hidden");
+  if (embedFrame) { embedFrame.remove(); embedFrame = null; }
   $("playerOverlayAction").classList.add("hidden");
   $("tvPlayerWrap").classList.remove("player-wrap--embed");
 }
@@ -1729,9 +1738,14 @@ function playEmbed(channel) {
     return;
   }
   $("tvPlayerWrap").classList.add("player-wrap--embed");
-  embedFrame.onload = () => { if (channel === currentPlayerChannel) playerOverlay.classList.add("hidden"); };
-  embedFrame.classList.remove("hidden");
-  embedFrame.src = url;
+  const frame = document.createElement("iframe");
+  frame.title = "TVNZ player";
+  frame.allow = "encrypted-media; autoplay; fullscreen; picture-in-picture";
+  frame.allowFullscreen = true;
+  frame.onload = () => { if (channel === currentPlayerChannel) playerOverlay.classList.add("hidden"); };
+  frame.src = tvnzFrameUrl(channel);
+  $("tvPlayerWrap").appendChild(frame);
+  embedFrame = frame;
 }
 
 function loadStream(url, mediaEl, { onWaiting, onReady, onFail, onReconnecting } = {}) {
@@ -2259,6 +2273,10 @@ function exitPlayerView() {
 }
 
 $("backFromPlayer").addEventListener("click", () => {
+  // TVNZ's player navigates inside its frame, and those steps sit in this
+  // tab's history above the player's own entry. Dropping the frame first
+  // drops them, so the history.back() below lands on the player's entry.
+  if (currentPlayerChannel && currentPlayerChannel.drm) stopEmbed();
   // Consume the entry openPlayer() pushed, so the player doesn't linger in
   // the history as somewhere Forward (or another Back) can land. popstate
   // then runs exitPlayerView(); if there is no entry to pop — a reload

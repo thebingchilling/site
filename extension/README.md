@@ -187,14 +187,25 @@ inside such a frame (sign-in, redirects). TVNZ's page CSP is only that
 `frame-ancestors` line, so removing the header drops nothing else. Pages
 opened as tabs are untouched.
 
-On a phone or tablet TVNZ's web player won't start at all: it shows
-"Open or Download the TVNZ+ App" instead, deciding from
-`navigator.userAgent` (and `maxTouchPoints` on a Mac user agent).
-`content/tvnz-desktop.js` runs in the frame's own world before TVNZ's
-scripts and presents it as the same browser on desktop, as the browser's
-"Desktop site" option would. It does nothing in a TVNZ tab, in TVNZ
-framed by any other site, or on a desktop browser. Running in the main
-world from the manifest needs Chrome 111.
+`content/tvnz-in-frame.js` runs in the frame's own world before TVNZ's
+scripts, only in a TVNZ frame inside this site (never a TVNZ tab, or TVNZ
+framed by another site), and does two things there:
+
+- **Turns TVNZ's service worker off.** It is Angular's ngsw, which answers
+  every page load from a copy it saved itself, still carrying the headers
+  the rule above strips from network responses. A rule can't reach a
+  response a service worker makes, so the first visit framed fine and
+  every later one was "refused to connect". Registering is refused, and
+  one already registered in the frame's storage is removed. live.html
+  also loads the frame with `?ngsw-bypass`, which ngsw sends straight to
+  the network, so a leftover worker can't serve that load either.
+- **Presents a phone or tablet as desktop.** TVNZ's web player won't start
+  on one, and shows "Open or Download the TVNZ+ App" instead, deciding
+  from `navigator.userAgent` (and `maxTouchPoints` on a Mac user agent).
+  This presents the frame as the same browser on desktop, as the
+  browser's "Desktop site" option would. Desktop browsers are left alone.
+
+Running in the main world from the manifest needs Chrome 111.
 
 `content/tvnz-frame.js` marks live.html with `data-bq-tvnz-frame`. Without
 it, live.html offers TVNZ's site in a new tab instead of a frame that
@@ -275,7 +286,7 @@ works everywhere, which is why that is still listed first above.
 - `content/no-popup-gate.js` — undoes both outside a player tab
 - `content/tvnz-frame.js` — tells live.html it can frame TVNZ's player
 - `rules/tvnz-frame.json` — the header rule that lets it be framed
-- `content/tvnz-desktop.js` — keeps TVNZ's player from sending phones to its app
+- `content/tvnz-in-frame.js` — turns TVNZ's service worker off in the frame, and keeps its player from sending phones to its app
 - `lib/scope.js` — the path allow-list that defines "the player"
 - `../.github/workflows/package-extension.yml` — build and release
 - `../.github/scripts/pack-crx.mjs` — the CRX3 writer
