@@ -1730,6 +1730,16 @@ function describeShakaError(err) {
         that allows it (extension/rules/live-cors.json) and marks the page
         with data-bq-live-cors, which is how a failure here can say
         "install the extension" rather than something vaguer. */
+/* Licence servers that refuse a challenge unless the client ID inside it is
+   encrypted ("privacy mode"), and the service certificate to encrypt it
+   with. TVNZ's is Google's own license.widevine.com one — the same file
+   TVNZ's web player loads — and the server answers a plain challenge with
+   INVALID_LICENSE_CHALLENGE. Matched on the licence URL, since another
+   server would reject a certificate that isn't its own. */
+const WIDEVINE_SERVER_CERTS = [
+  { licence: /^https:\/\/c\.mjh\.nz\/tvnz-/, uri: "https://storage.googleapis.com/wvmedia/cert/cert_license_widevine_com_prod.bin" }
+];
+
 function drmFailureText(err) {
   const blocked = err && err.category === shaka.util.Error.Category.NETWORK;
   if (blocked && !document.documentElement.dataset.bqLiveCors) {
@@ -1778,7 +1788,11 @@ async function loadDrmStream(channel, mediaEl, { onReady, onFail } = {}) {
     console.error("Shaka runtime error", e.detail);
     reportOnce("Playback stopped: " + drmFailureText(e.detail));
   });
-  player.configure({ drm: { servers: { "com.widevine.alpha": channel.licenseUrl } } });
+  const cert = WIDEVINE_SERVER_CERTS.find(c => c.licence.test(channel.licenseUrl));
+  player.configure({ drm: {
+    servers: { "com.widevine.alpha": channel.licenseUrl },
+    advanced: cert ? { "com.widevine.alpha": { serverCertificateUri: cert.uri } } : {}
+  } });
 
   try {
     await player.attach(mediaEl);
