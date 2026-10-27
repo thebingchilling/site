@@ -6,20 +6,21 @@
    page load refreshes it, and a refusal clears it, putting the device
    back on its own sources.
 
-   Stored under one key: { origin, key, data }. The data is cached so a
-   page still has its sources when the network doesn't answer.
+   The link is just the Links Worker's address, nothing after it. Stored
+   under one key: { origin, data }. The data is cached so a page still has
+   its sources when the network doesn't answer.
    ═══════════════════════════════════════════════════════════════════════ */
 window.BQFeed = (function () {
   "use strict";
 
-  const ORIGIN_SHA256 = "d93369814adc6331a8a2d2ddf579e9678752078d5a8afe537e7c373aacbeb338";
+  const ORIGIN_SHA256 = "373812ff03241a1b0ad32796bfcac8ea69cb3472176ef845b9685bf045e8fdc4";
   const STORE_KEY = "bq_managed";
   const TIMEOUT_MS = 6000;
 
   function read() {
     try {
       const v = JSON.parse(localStorage.getItem(STORE_KEY));
-      return v && typeof v.origin === "string" && typeof v.key === "string" ? v : null;
+      return v && typeof v.origin === "string" ? v : null;
     } catch (e) { return null; }
   }
   function write(v) {
@@ -53,35 +54,28 @@ window.BQFeed = (function () {
     return { media, live: { tv: urls(l.tv), radio: urls(l.radio), epg: isHttp(l.epg) ? l.epg.trim() : "" } };
   }
 
-  async function load(origin, key) {
-    const res = await fetchWithTimeout(origin + "/api/feed", { headers: { authorization: "Bearer " + key } });
-    if (res.status === 401 || res.status === 403) return { refused: true };
+  async function load(origin) {
+    const res = await fetchWithTimeout(origin + "/api/feed");
+    if (res.status === 401 || res.status === 403 || res.status === 404) return { refused: true };
     if (!res.ok) throw new Error(String(res.status));
     return { data: normalise(await res.json()) };
   }
 
+  async function isLinksOrigin(origin) {
+    return !!(window.crypto && crypto.subtle) && (await sha256Hex(origin)) === ORIGIN_SHA256;
+  }
+
   /* Resolves true if `value` made this device managed. Anything else —
-     an ordinary URL, a wrong passphrase, no network — resolves false, and
-     the caller carries on exactly as it would have. */
+     an ordinary URL, no network — resolves false, and the caller carries
+     on exactly as it would have. */
   async function claim(value) {
     let u;
     try { u = new URL(String(value || "").trim()); } catch (e) { return false; }
-    if (u.hash.length < 2 || !window.crypto || !crypto.subtle) return false;
-    if ((await sha256Hex(u.origin)) !== ORIGIN_SHA256) return false;
-    let pass = u.hash.slice(1);
-    try { pass = decodeURIComponent(pass); } catch (e) { /* keep it as typed */ }
+    if (!(await isLinksOrigin(u.origin))) return false;
     try {
-      const res = await fetchWithTimeout(u.origin + "/api/unlock", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password: pass }),
-      });
-      if (!res.ok) return false;
-      const out = await res.json();
-      if (!out || typeof out.key !== "string") return false;
-      const got = await load(u.origin, out.key);
+      const got = await load(u.origin);
       if (!got.data) return false;
-      write({ origin: u.origin, key: out.key, data: got.data });
+      write({ origin: u.origin, data: got.data });
       return true;
     } catch (e) {
       return false;
@@ -93,10 +87,13 @@ window.BQFeed = (function () {
   async function refresh() {
     const v = read();
     if (!v) return null;
+    // A device claimed from a Links address the site no longer uses goes
+    // back to its own sources rather than following a dead feed forever.
+    if (!(await isLinksOrigin(v.origin).catch(() => false))) { clear(); return null; }
     try {
-      const got = await load(v.origin, v.key);
+      const got = await load(v.origin);
       if (got.refused) { clear(); return null; }
-      write({ ...v, data: got.data });
+      write({ origin: v.origin, data: got.data });
       return got.data;
     } catch (e) {
       return v.data ? normalise(v.data) : null;
@@ -112,7 +109,7 @@ window.BQFeed = (function () {
     let pending = false;
     input.addEventListener("paste", (e) => {
       const text = e.clipboardData ? e.clipboardData.getData("text") : "";
-      if (pending || !text.includes("#")) return;
+      if (pending || !/^\s*https?:\/\//i.test(text)) return;
       pending = true;
       claim(text).then((ok) => { if (ok) onClaimed(); }).finally(() => { pending = false; });
     });

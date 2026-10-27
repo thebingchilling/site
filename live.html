@@ -577,6 +577,11 @@
     .epg-result__meta { margin-top: 0.15rem; font: var(--type-label-small); letter-spacing: var(--track-label-small); color: var(--text-faint); }
     .epg-result__when { flex-shrink: 0; font: var(--type-label-small); letter-spacing: var(--track-label-small); color: var(--md-primary); font-weight: 600; }
     .epg-result--live .epg-result__when { color: var(--md-error); }
+    .ext-menu-wrap { display: inline-block; }
+    .ext-menu-btn__caret { margin: 0 -0.3rem 0 0.1rem; }
+    .ext-menu { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; min-width: 220px; }
+    .ext-menu .menu__item { text-decoration: none; }
+    .ext-menu .menu__item .material-icons { visibility: visible; color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -789,6 +794,34 @@
         <div class="playlist-form__actions">
           <button id="playlistCancel" class="btn btn--ghost btn--sm" type="button">Cancel</button>
           <button id="playlistSave" class="btn btn--primary btn--sm" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Popup blocker -->
+    <div class="sheet__section">
+      <div class="sheet__section-label">Popup blocker</div>
+      <p class="sheet__hint">
+        Lets the TVNZ channels play here, which won't load without it, and
+        closes the tabs and ad windows that video sources open, on the
+        player only — no settings, nothing to configure.
+      </p>
+      <!-- Behind a menu so a stray tap in the sheet doesn't start a download. -->
+      <div class="menu-wrap ext-menu-wrap">
+        <button id="extMenuBtn" class="btn btn--primary btn--sm" type="button"
+                aria-haspopup="menu" aria-expanded="false" aria-controls="extMenu">
+          <span class="material-icons" aria-hidden="true">download</span>Download extension
+          <span class="material-icons ext-menu-btn__caret" aria-hidden="true">arrow_drop_down</span>
+        </button>
+        <div id="extMenu" class="menu ext-menu hidden" role="menu" aria-label="Download extension">
+          <a class="menu__item" role="menuitem" href="/downloads/bingqilin-popup-blocker.zip"
+             download="bingqilin-popup-blocker.zip">
+            <span class="material-icons" aria-hidden="true">folder_zip</span><span>.zip — load unpacked</span>
+          </a>
+          <a class="menu__item" role="menuitem" href="/downloads/bingqilin-popup-blocker.crx"
+             download="bingqilin-popup-blocker.crx">
+            <span class="material-icons" aria-hidden="true">extension</span><span>.crx</span>
+          </a>
         </div>
       </div>
     </div>
@@ -1660,6 +1693,26 @@ function closeSettings() { settingsDialog.close(); }
 settingsBtn.addEventListener("click", openSettings);
 settingsClose.addEventListener("click", closeSettings);
 
+/* ── Extension download menu ── */
+const extMenuBtn = $("extMenuBtn"), extMenu = $("extMenu");
+function openExtMenu() {
+  extMenu.classList.remove("hidden"); extMenuBtn.setAttribute("aria-expanded", "true");
+  extMenu.querySelector(".menu__item").focus();
+}
+function closeExtMenu() { extMenu.classList.add("hidden"); extMenuBtn.setAttribute("aria-expanded", "false"); }
+extMenuBtn.addEventListener("click", () => { if (extMenu.classList.contains("hidden")) openExtMenu(); else closeExtMenu(); });
+extMenu.addEventListener("click", e => { if (e.target.closest(".menu__item")) closeExtMenu(); });
+document.addEventListener("click", e => {
+  if (!extMenu.classList.contains("hidden") && !e.target.closest(".ext-menu-wrap")) closeExtMenu();
+});
+// On window, in capture: the settings sheet's own Escape handler is on
+// document in capture, and would otherwise close the whole sheet.
+window.addEventListener("keydown", e => {
+  if (e.key !== "Escape" || extMenu.classList.contains("hidden")) return;
+  e.stopPropagation(); e.preventDefault();
+  closeExtMenu(); extMenuBtn.focus();
+}, true);
+
 $("emptyStateImportBtn").addEventListener("click", openSettings);
 
 /* ═══════════ Playback ═══════════ */
@@ -1731,7 +1784,7 @@ function stopEmbed() {
 function playEmbed(channel) {
   const url = tvnzPlayerUrl(channel);
   if (!document.documentElement.dataset.bqTvnzFrame) {
-    $("playerOverlayText").textContent = "TVNZ's player can only open here with the Bingqilin extension — install it from Settings on the Media page, in Chrome or Edge.";
+    $("playerOverlayText").textContent = "TVNZ's player can only open here with the Bingqilin extension — install it from Settings, in Chrome or Edge.";
     const action = $("playerOverlayAction");
     action.href = url;
     action.classList.remove("hidden");
