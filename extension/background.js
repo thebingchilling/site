@@ -122,9 +122,14 @@ chrome.webNavigation.onCreatedNavigationTarget.addListener((details) => {
   // resolves immediately, puts the close a task later than it needs to be.
   if (playerTabs.has(details.sourceTabId)) {
     close(details.tabId);
+    learnFromPopup(details.sourceTabId, details.sourceFrameId);
     return;
   }
-  isPlayerTab(details.sourceTabId).then((yes) => { if (yes) close(details.tabId); });
+  isPlayerTab(details.sourceTabId).then((yes) => {
+    if (!yes) return;
+    close(details.tabId);
+    learnFromPopup(details.sourceTabId, details.sourceFrameId);
+  });
 });
 
 /* ── Popups that do not ────────────────────────────────────────────────
@@ -226,13 +231,34 @@ const WANTED_KEY = "wantedOrigins";
 /* Origins the configured sources point at, as chrome match patterns. */
 let wantedOrigins = [];
 
+/* Origins the embeds actually landed on, origin -> when last seen. A
+   source URL names where the embed starts, not where it ends up: it
+   redirects to a mirror, or sends its own frame somewhere else, and the
+   page that plays — and opens the popups — is on a host nobody granted,
+   so neither the decoy nor the sandbox can reach it. See "Where the
+   embeds land" below. */
+const LANDED_KEY = "landedOrigins";
+const LANDED_TTL = 30 * 24 * 60 * 60 * 1000;
+let landedOrigins = {};
+
+/* Everything that wants a grant: the sources, and where they landed. */
+function allWanted() {
+  return [...new Set([...wantedOrigins, ...Object.keys(landedOrigins)])].sort();
+}
+
 const asPattern = (origin) => `${origin}/*`;
 
-const wantedLoaded = chrome.storage.local.get(WANTED_KEY).then((got) => {
+const wantedLoaded = chrome.storage.local.get([WANTED_KEY, LANDED_KEY]).then((got) => {
   if (Array.isArray(got[WANTED_KEY]) && !wantedOrigins.length) {
     wantedOrigins = got[WANTED_KEY];
-    refreshBadge();
   }
+  /* A host not landed on for a month is a mirror that has moved on. It
+     drops out here, and its grant is revoked with the next stale sweep. */
+  const now = Date.now();
+  for (const [origin, seen] of Object.entries(got[LANDED_KEY] || {})) {
+    if (now - seen < LANDED_TTL && !(origin in landedOrigins)) landedOrigins[origin] = seen;
+  }
+  refreshBadge();
 }).catch(() => { /* nothing stored yet */ });
 
 async function grantedOrigins() {
@@ -249,9 +275,9 @@ function originOf(pattern) {
 async function splitOrigins() {
   const granted = new Set((await grantedOrigins()).map(originOf));
   return {
-    missing: wantedOrigins.filter((o) => !granted.has(o)),
+    missing: allWanted().filter((o) => !granted.has(o)),
     stale: [...granted].filter(
-      (o) => o !== `https://${PLAYER_HOST}` && !wantedOrigins.includes(o),
+      (o) => o !== `https://${PLAYER_HOST}` && !allWanted().includes(o),
     ),
   };
 }
@@ -275,7 +301,7 @@ async function refreshBadge() {
 async function syncStub() {
   const granted = (await grantedOrigins())
     .map(originOf)
-    .filter((o) => o !== `https://${PLAYER_HOST}` && wantedOrigins.includes(o));
+    .filter((o) => o !== `https://${PLAYER_HOST}` && allWanted().includes(o));
 
   try {
     await chrome.scripting.unregisterContentScripts({ ids: [STUB_SCRIPT_ID, GATE_SCRIPT_ID] });
@@ -331,7 +357,8 @@ async function syncStub() {
        unsandboxed document.
    Both only for granted source hosts: changing a response's headers
    needs host permission for it, the same grant the decoy runs under. A
-   frame that navigates itself to a host nobody granted is out of reach. */
+   frame that lands on a host nobody granted is out of reach until it is
+   noted (see "Where the embeds land") and that host is granted. */
 
 const SANDBOX_CSP = [
   "sandbox",
@@ -362,7 +389,7 @@ async function writeSandboxRules() {
   await Promise.all([tabsLoaded, wantedLoaded]);
   const granted = (await grantedOrigins())
     .map(originOf)
-    .filter((o) => o !== `https://${PLAYER_HOST}` && wantedOrigins.includes(o));
+    .filter((o) => o !== `https://${PLAYER_HOST}` && allWanted().includes(o));
   const hosts = [...new Set(granted.map((o) => new URL(o).hostname))];
   const tabIds = [...playerTabs.keys()];
 
@@ -434,6 +461,67 @@ async function setWantedOrigins(origins) {
   await refreshBadge();
 }
 
+/* ── Where the embeds land ─────────────────────────────────────────────
+   A source's URL is only where its embed starts. Most of them redirect to
+   a mirror or send their frame on to another host before anything plays,
+   and that host is the one opening the popups — ungranted, so unstubbed
+   and unsandboxed, and left to the fallback above, which flashes.
+
+   So the host each player-level frame actually commits on is noted, and
+   joins the list waiting behind the toolbar click like a new source
+   does. Only frames directly inside the player: anything nested deeper
+   inherits the sandbox from the one above it once that one is granted.
+
+   The frame a popup came from is traced the same way, as a second net
+   for a navigation this missed. */
+
+/* Only the movie player. Live TV frames TVNZ's own player, which is
+   neither a source nor something to sandbox. */
+function learnsIn(tabId) {
+  try { return !new URL(playerTabs.get(tabId)).pathname.startsWith("/live"); } catch { return false; }
+}
+
+async function noteLanded(url) {
+  let origin;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return;
+    origin = u.origin;
+  } catch { return; }
+  await wantedLoaded;   // or this write would drop the stored list
+  if (origin === `https://${PLAYER_HOST}` || wantedOrigins.includes(origin)) return;
+
+  const now = Date.now();
+  const isNew = !(origin in landedOrigins);
+  /* Refreshed at most daily, so a long film is not a storage write per
+     navigation. */
+  if (!isNew && now - landedOrigins[origin] < 24 * 60 * 60 * 1000) return;
+  landedOrigins[origin] = now;
+  chrome.storage.local.set({ [LANDED_KEY]: landedOrigins });
+  /* Already granted for some other reason: put it under the sandbox now
+     rather than waiting for a click that will never be asked for. */
+  if (isNew) { syncStub(); refreshBadge(); }
+}
+
+chrome.webNavigation.onCommitted.addListener((details) => {
+  const { tabId, frameId, parentFrameId, url } = details;
+  if (frameId === TOP_FRAME || !playerTabs.has(tabId) || !learnsIn(tabId)) return;
+  if (parentFrameId === TOP_FRAME) noteLanded(url);
+});
+
+/* The player-level frame above the one that asked for a popup. */
+async function learnFromPopup(tabId, frameId) {
+  if (!learnsIn(tabId)) return;
+  try {
+    for (let depth = 0; depth < 16 && frameId !== TOP_FRAME; depth++) {
+      const frame = await chrome.webNavigation.getFrame({ tabId, frameId });
+      if (!frame) return;
+      if (frame.parentFrameId === TOP_FRAME) { noteLanded(frame.url); return; }
+      frameId = frame.parentFrameId;
+    }
+  } catch { /* tab or frame gone */ }
+}
+
 /* One click, in the gesture Chrome requires. wantedOrigins is already in
    memory, so nothing is awaited before the request and the gesture holds. */
 chrome.action.onClicked.addListener(() => {
@@ -441,11 +529,12 @@ chrome.action.onClicked.addListener(() => {
      not already granted, and asking inside the click is what keeps the
      gesture valid. Nothing is awaited first, because an await here would
      spend the gesture and the request would be refused. */
-  if (!wantedOrigins.length) {
+  const wanted = allWanted();
+  if (!wanted.length) {
     chrome.action.setTitle({ title: "Open the Bingqilin player once so it can read your sources" });
     return;
   }
-  chrome.permissions.request({ origins: wantedOrigins.map(asPattern) })
+  chrome.permissions.request({ origins: wanted.map(asPattern) })
     .then(async (granted) => {
       if (granted) await syncStub();
       await refreshBadge();

@@ -115,12 +115,31 @@ What it does **not** cover:
 
 - **Sources you have not granted.** Changing a response's headers needs
   host permission for it — the same one click the decoy needs.
-- **An embed that sends its own frame to a host nobody granted.** That
-  document is out of reach, and is left to the fallback.
+- **An embed that lands on a host nobody granted** — a redirect to a
+  mirror, or the embed sending its frame on. That load is left to the
+  fallback, so it flashes once; the host is then learned (below) and
+  waits behind the toolbar click like a new source.
 - **Detection from a nested frame.** Frames inside the embed inherit the
   sandbox but not the decoy (unless their host is granted too), so there
   `window.open` really does return `null`. Popups stay blocked; a source
   that checks from there could refuse to play.
+
+### Where the embeds land
+
+A source URL is only where its embed *starts*. Most redirect to a mirror,
+or send their frame on to another host, before anything plays — and that
+host is the one opening popups. Nobody granted it, so neither the decoy
+nor the sandbox reaches it, and every popup flashes.
+
+So in a movie-player tab the worker notes the host each frame directly
+inside the player commits on, and the host of the player-level frame any
+popup came from. A new one joins the list behind the toolbar click and
+puts a number on the badge. Click once more, and from the next load it is
+stubbed and sandboxed like a source. Frames nested deeper need nothing:
+they inherit the sandbox from the one above.
+
+A learned host not landed on for 30 days is dropped and its grant
+revoked. Live TV is left out: its frame is TVNZ's own player.
 
 ### Where it runs, and how it keeps up
 
@@ -326,7 +345,7 @@ works everywhere, which is why that is still listed first above.
 ## Files
 
 - `manifest.json` — MV3; `webNavigation` + `storage` + `declarativeNetRequest`, host permissions for this site and tvnz.co.nz
-- `background.js` — the three rules, and the sandbox rules
+- `background.js` — the three rules, the sandbox rules, and learning where embeds land
 - `content/keepalive.js` — keeps the worker resident, reports source origins
 - `content/no-popup.js` — the decoy window and the target cancelling,
   injected into granted sources
