@@ -17,7 +17,7 @@
   "permissions": ["webNavigation", "storage", "scripting", "declarativeNetRequest"],
 
   "host_permissions": [
-    "https://thebingchilling.github.io/*",
+    "https://thebingchilling.pages.dev/*",
     "https://*.tvnz.co.nz/*"
   ],
 
@@ -33,13 +33,13 @@
 
   "content_scripts": [
     {
-      "matches": ["https://thebingchilling.github.io/*"],
-      "exclude_matches": ["https://thebingchilling.github.io/tools/*"],
+      "matches": ["https://thebingchilling.pages.dev/*"],
+      "exclude_matches": ["https://thebingchilling.pages.dev/tools/*"],
       "js": ["content/keepalive.js"],
       "run_at": "document_start"
     },
     {
-      "matches": ["https://thebingchilling.github.io/live", "https://thebingchilling.github.io/live.html"],
+      "matches": ["https://thebingchilling.pages.dev/live", "https://thebingchilling.pages.dev/live.html"],
       "js": ["content/tvnz-frame.js"],
       "run_at": "document_start"
     },
