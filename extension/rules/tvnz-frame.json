@@ -10,7 +10,7 @@
       ]
     },
     "condition": {
-      "initiatorDomains": ["thebingchilling.github.io", "tvnz.co.nz"],
+      "initiatorDomains": ["thebingchilling.pages.dev", "tvnz.co.nz"],
       "requestDomains": ["tvnz.co.nz"],
       "resourceTypes": ["sub_frame"]
     }
