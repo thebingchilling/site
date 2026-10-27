@@ -26,7 +26,7 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 (() => {
-  const SITE = "https://thebingchilling.github.io";
+  const SITE = "https://thebingchilling.pages.dev";
   if (window.top === window) return;
   const ancestors = location.ancestorOrigins;
   if (ancestors && ancestors.length && ancestors[ancestors.length - 1] !== SITE) return;
