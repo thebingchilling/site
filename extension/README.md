@@ -1,9 +1,10 @@
 # Bingqilin Popup Blocker
 
 A Chrome extension that stops the popups and tab-unders the player's video
-embeds open. Granted a source's origin — one click — it prevents them
-inside that source's frame, so nothing is ever created and there is no
-flash. Everywhere else it falls back to closing them after the fact.
+embeds open. Every frame inside the player is sandboxed, whatever host it
+is on, so Chrome refuses to create the tab at all — nothing to close, no
+flash, and nothing to set up or click. Anywhere other than the player, it
+does nothing.
 
 ## What it covers
 
@@ -20,25 +21,53 @@ the tab is created, takes focus, paints and is then removed, which you see
 as a flash. Nothing driven from the service worker can be earlier: by the
 time Chrome reports a tab was created, it was created.
 
-Getting rid of the flash means stopping the tab from being asked for at
-all, which can only be done inside the embed's own frame — so it needs
-permission for the embed's origin, which is the one click described below.
-Where that grant exists, the next section takes over and these three rules
-see nothing to do. Where it does not, they are all there is, and ads flash.
+With the sandbox below in place they see nothing to do. They stay as a
+net for anything that gets past it.
 
-Never *refusing* is also what keeps this invisible to the source. A source
-that will not play under a sandbox is detecting that `window.open` failed —
-here it does not fail.
+## The sandbox
 
-Behind the decoy, the same frames are **sandboxed** too — see
-[The sandbox](#the-sandbox). The decoy is what the embed sees; the
-sandbox is what actually stops it.
+Every frame the player loads is served with
+
+    Content-Security-Policy: sandbox allow-scripts allow-same-origin allow-forms
+      allow-modals allow-pointer-lock allow-orientation-lock allow-presentation
+
+added to its response by `declarativeNetRequest`. No `allow-popups` and
+no `allow-top-navigation`: Chrome itself refuses every new tab and every
+navigation of the player's tab from that frame, and from every frame
+nested inside it, whatever script asked. Nothing is created, so there is
+nothing to flash.
+
+The header is *appended*. Every CSP header is enforced on its own, so the
+source's own policy is left exactly as it was.
+
+Two rules, because a sandbox from a header belongs to the document, not
+the frame:
+
+| Rule | Covers |
+| --- | --- |
+| `rules/sandbox.json` (static): frames this site loads | The embed's first load. It is in place before the player exists, so it cannot lose a race to it |
+| A session rule: any frame load inside a movie-player tab | An embed that redirects to a mirror or sends its own frame on to another host, which would otherwise get a fresh, unsandboxed document |
+
+**Any host.** The extension has `<all_urls>`, granted at install, so it
+can do this to whatever host an embed starts on or ends up on. Sources
+get renewed and mirrors rotate; there is no list of them anywhere, and
+nothing to click when they change. Chrome shows "read and change all your
+data on all websites" at install because of it — it cannot know the
+extension only acts inside the player, which is what the rest of this
+file is about.
+
+TVNZ is left out of both rules: Live TV frames TVNZ's own player, which
+has to sign in.
+
+The `<iframe sandbox>` attribute gives the same sandbox, and was tried and
+dropped because sources refused to play: a sandboxed `window.open` returns
+`null`, and they check. That is what the decoy is for.
 
 ## The decoy
 
 Closing is always late. The way to have nothing to close is for
 `window.open` never to open anything — but return something anyway.
-`content/no-popup.js` replaces it, inside the embed's own frame, with a
+`content/no-popup.js` replaces it, in every frame inside the player, with a
 function handing back an object that behaves like a window and is not one:
 truthy, `closed === false`, and `document.write` / `location =` / `focus()`
 all accepted and discarded. Nothing is created, so there is no flash.
@@ -49,6 +78,11 @@ all accepted and discarded. Nothing is created, so there is no flash.
     if (!w || w.closed) { /* fall back to redirecting your tab */ }
 
 so a decoy that reports itself closed just pushes them to the tab-under.
+
+Never *refusing* is what keeps the sandbox invisible to the source. A
+source that will not play under a sandbox is detecting that `window.open`
+failed — here it does not fail, because the decoy answers before the
+sandbox is ever asked.
 
 ### The targets, which never ask `window.open` at all
 
@@ -79,107 +113,19 @@ Three paths, because two of them never reach a listener:
 popup, is resolved too. Links with no target, or `target="_self"`, are left
 exactly as they were.
 
-## The sandbox
-
-The decoy and the target cancelling are scripts, and a script can be
-outrun: an opener nobody anticipated, a frame nested inside the embed on
-an origin that was never granted. So granted sources are also served
-with
-
-    Content-Security-Policy: sandbox allow-scripts allow-same-origin allow-forms
-      allow-modals allow-pointer-lock allow-orientation-lock allow-presentation
-
-added to their frame responses by a `declarativeNetRequest` session rule.
-No `allow-popups` and no `allow-top-navigation`: Chrome itself refuses
-every new tab and every navigation of the player's tab from that frame,
-and from every frame nested inside it, whatever script asked.
-
-The `<iframe sandbox>` attribute was tried before and dropped, because
-sources refused to play: a sandboxed `window.open` returns `null`, and
-they check. A header gives the same sandbox, but the decoy is still in
-the frame, so the check gets a window back and the sandbox does the
-refusing out of sight. The page is not changed at all.
-
-The header is *appended*. Every CSP header is enforced on its own, so the
-source's own policy is left exactly as it was.
-
-Two rules, because a sandbox from a header belongs to the document, not
-the frame:
-
-| Rule | Covers |
-| --- | --- |
-| Frames this site loads from a granted host | The embed's first load. It is in place before the player exists, so it cannot lose a race to it |
-| Any frame load from a granted host inside a player tab | An embed that sends its own frame to a new URL, which would otherwise get a fresh, unsandboxed document |
-
-What it does **not** cover:
-
-- **Sources you have not granted.** Changing a response's headers needs
-  host permission for it — the same one click the decoy needs.
-- **An embed that lands on a host nobody granted** — a redirect to a
-  mirror, or the embed sending its frame on. That load is left to the
-  fallback, so it flashes once; the host is then learned (below) and
-  waits behind the toolbar click like a new source.
-- **Detection from a nested frame.** Frames inside the embed inherit the
-  sandbox but not the decoy (unless their host is granted too), so there
-  `window.open` really does return `null`. Popups stay blocked; a source
-  that checks from there could refuse to play.
-
-### Where the embeds land
-
-A source URL is only where its embed *starts*. Most redirect to a mirror,
-or send their frame on to another host, before anything plays — and that
-host is the one opening popups. Nobody granted it, so neither the decoy
-nor the sandbox reaches it, and every popup flashes.
-
-So in a movie-player tab the worker notes the host each frame directly
-inside the player commits on, and the host of the player-level frame any
-popup came from. A new one joins the list behind the toolbar click and
-puts a number on the badge. Click once more, and from the next load it is
-stubbed and sandboxed like a source. Frames nested deeper need nothing:
-they inherit the sandbox from the one above.
-
-A learned host not landed on for 30 days is dropped and its grant
-revoked. Live TV is left out: its frame is TVNZ's own player.
-
-### Where it runs, and how it keeps up
-
-Inside the source origins — never a hardcoded list. **Sources get renewed,
-and a list baked into an extension is wrong by the next rotation.** So:
-
-1. `content/keepalive.js` reads the sources the player is actually using
-   — the managed list in `bq_managed` when the device was set up from the
-   managed link, otherwise the hand-added `bq_sources` — and reports
-   **only their origins** over the port. The URL templates and everything
-   else stay on the page.
-2. Chrome will not grant a host at runtime without a user gesture, so new
-   origins wait behind **one click on the toolbar icon**. The badge shows
-   how many are waiting. There is no popup or options page — the click on
-   the icon *is* the gesture.
-3. An origin that drops out of the list needs no gesture to lose its
-   grant, so it is revoked on sight and stops being injected.
-
 ### Only inside the player
 
-Being granted a source origin is not the same as acting on it. The decoy
-has to be in place before the embed's own scripts run, and at that moment
-the frame cannot tell what tab it is in — it is cross-origin to everything
-above it. So it goes in first and asks afterwards:
-`content/no-popup-gate.js` asks the worker, which can see the tab's URL,
-and the worker reaches back into the frame and undoes the decoy if that
-tab is not the player.
+The decoy is declared for every frame on every site, and the first thing
+it does is check `location.ancestorOrigins`: the origins of every page
+above the frame, readable synchronously and across origins, before any of
+the embed's scripts run. Unless the outermost one is this site, it
+returns without touching anything. TVNZ's frame, and anything inside it,
+is skipped too.
 
 So one of your source domains embedded on somebody else's site, or opened
 in a tab of its own, behaves exactly as it would with this extension
-uninstalled. The undo is done from the extension rather than by listening
-for an event, because an event the page can see is an event the page can
-fire.
-
-Rotate your sources, reload the player, click once. Nothing to reinstall
-and no domain written into the extension, the manifest or this repository.
-
-`optional_host_permissions` is declared broadly so that any origin *can*
-be requested, but nothing is granted at install and the prompt at click
-time names only the sites your own sources point at.
+uninstalled. The sandbox rules are scoped the same way: one to frames this
+site loads, the other to tabs on the movie player.
 
 ### Keeping the flash short
 
@@ -208,9 +154,10 @@ and its own service worker precaches both.
 Nothing else. Not `/tools/*` — the tools pages open tabs on purpose
 (torrent links, SauceNAO results, a rendered PDF), and with no UI to
 explain a blocked one, a tools page that silently fails to open a link is
-worse than an ad. Not any other site either: the extension's only host
-permission is this one origin, and `tabs.get()` hands back a URL only for
-hosts an extension can access, so a tab anywhere else is invisible to it.
+worse than an ad. Not any other site either: every rule checks the tab is
+the player (`lib/scope.js`) before acting, and the decoy checks its own
+ancestors. The tools pages load no frames, so the static sandbox rule —
+which can only match on this site's domain — has nothing to act on there.
 
 ## What tells a wanted tab from an unwanted one
 
@@ -344,12 +291,12 @@ works everywhere, which is why that is still listed first above.
 
 ## Files
 
-- `manifest.json` — MV3; `webNavigation` + `storage` + `declarativeNetRequest`, host permissions for this site and tvnz.co.nz
-- `background.js` — the three rules, the sandbox rules, and learning where embeds land
-- `content/keepalive.js` — keeps the worker resident, reports source origins
-- `content/no-popup.js` — the decoy window and the target cancelling,
-  injected into granted sources
-- `content/no-popup-gate.js` — undoes both outside a player tab
+- `manifest.json` — MV3; `webNavigation` + `storage` + `scripting` + `declarativeNetRequest`, and `<all_urls>`
+- `background.js` — the three rules, and the sandbox rule for player tabs
+- `rules/sandbox.json` — the sandbox rule for frames this site loads
+- `content/keepalive.js` — keeps the worker resident, tells it which tabs are the player
+- `content/no-popup.js` — the decoy window and the target cancelling, in
+  every frame inside the player
 - `content/tvnz-frame.js` — tells live.html it can frame TVNZ's player
 - `rules/tvnz-frame.json` — the header rule that lets it be framed
 - `content/tvnz-in-frame.js` — turns TVNZ's service worker off in the frame, and keeps its player from sending phones to its app

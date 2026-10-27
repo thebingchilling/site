@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Bingqilin Popup Blocker",
-  "version": "1.9.0",
-  "description": "Blocks the popups and tab-unders that the Bingqilin player's video embeds open, and lets Live TV show TVNZ's own player. Runs on the player only — never on the tools pages or anywhere else.",
+  "version": "2.0.0",
+  "description": "Blocks the popups and tab-unders that the Bingqilin player's video embeds open, and lets Live TV show TVNZ's own player. Acts on the player only — never on the tools pages or anywhere else.",
   "minimum_chrome_version": "111",
 
   "icons": {
@@ -16,18 +16,14 @@
 
   "permissions": ["webNavigation", "storage", "scripting", "declarativeNetRequest"],
 
-  "host_permissions": [
-    "https://thebingchilling.pages.dev/*",
-    "https://*.tvnz.co.nz/*"
-  ],
+  "host_permissions": ["<all_urls>"],
 
   "declarative_net_request": {
     "rule_resources": [
-      { "id": "tvnz_frame", "enabled": true, "path": "rules/tvnz-frame.json" }
+      { "id": "tvnz_frame", "enabled": true, "path": "rules/tvnz-frame.json" },
+      { "id": "sandbox", "enabled": true, "path": "rules/sandbox.json" }
     ]
   },
-
-  "optional_host_permissions": ["*://*/*"],
 
   "action": { "default_title": "Bingqilin Popup Blocker" },
 
@@ -36,6 +32,15 @@
       "matches": ["https://thebingchilling.pages.dev/*"],
       "exclude_matches": ["https://thebingchilling.pages.dev/tools/*"],
       "js": ["content/keepalive.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://*/*"],
+      "exclude_matches": ["https://thebingchilling.pages.dev/*", "https://*.tvnz.co.nz/*"],
+      "js": ["content/no-popup.js"],
+      "all_frames": true,
+      "match_origin_as_fallback": true,
+      "world": "MAIN",
       "run_at": "document_start"
     },
     {

@@ -2,10 +2,12 @@
    Hand the embed a window that isn't one, and take away the two ways of
    opening one that never ask window.open at all.
 
-   Registered at runtime against the origins of whatever sources are
-   configured — never a hardcoded list, and never a site the user has not
-   granted. It runs in the MAIN world of those frames, because the things
-   it replaces are the page's own.
+   Declared for every frame on every site, and does nothing unless the
+   frame is inside the player: location.ancestorOrigins names every page
+   above a frame, synchronously and even across origins, so a frame can
+   tell before any of the embed's scripts run. A source embedded anywhere
+   else behaves exactly as it would without this extension. It runs in
+   the MAIN world, because the things it replaces are the page's own.
 
    Why a decoy rather than a refusal: a source that will not play under a
    sandbox is detecting that window.open *failed*. Returning null, throwing,
@@ -13,7 +15,7 @@
    truthy and well-behaved, and simply never opens anything. Nothing is
    created, so there is no tab to close and no flash to see.
 
-   The same frames are also sandboxed now, by a header the worker adds
+   The same frames are also sandboxed, by a header the extension adds
    (see "The sandbox" in background.js), and that is what actually stops
    them. This is what keeps the sandbox from showing: without it the
    embed's window.open would return the sandbox's null.
@@ -31,9 +33,13 @@
 (() => {
   "use strict";
 
-  /* Only inside a frame. A top-level visit to one of these domains is the
-     user going there deliberately, and their popups are their business. */
-  if (window === window.top) return;
+  /* Only inside the player. The last ancestor is the tab's own page; any
+     other site, or a top-level visit, is left alone. Live TV frames
+     TVNZ's player, which is not an embed and is never touched. */
+  const PLAYER_ORIGIN = "https://thebingchilling.pages.dev";
+  const ancestors = [...(location.ancestorOrigins || [])];
+  if (ancestors[ancestors.length - 1] !== PLAYER_ORIGIN) return;
+  if (ancestors.some((o) => /^https:\/\/([^/]+\.)?tvnz\.co\.nz$/.test(o))) return;
 
   const noop = function () {};
 
@@ -87,18 +93,6 @@
     return proxy;
   };
 
-  /* Everything this frame changed, and how to change it back. The decoy
-     goes in immediately — waiting to find out whether this frame is inside
-     a player tab would be a race the embed could win — and is taken out
-     again a moment later if it turns out not to be.
-     content/no-popup-gate.js asks; the worker answers by running
-     window.__bqRestore in this frame.
-
-     Undoing is done from the extension rather than by listening for an
-     event, because an event the page can see is an event the page can
-     fire. */
-  const undo = [];
-
   /* Keep the replacements looking native: a script that prints one should
      not see a giveaway body. */
   const mask = (replacement, original) => {
@@ -116,11 +110,6 @@
       value: mask(function () { return makeWindow(); }, open),
     });
 
-    undo.push(() => {
-      Object.defineProperty(window, "open", {
-        configurable: true, writable: true, value: open,
-      });
-    });
   } catch { /* locked down; leave the page as it is */ }
 
   /* ── Targets that open a tab without asking ──────────────────────────
@@ -171,10 +160,6 @@
 
     document.addEventListener("click", onClick, true);
     document.addEventListener("submit", onSubmit, true);
-    undo.push(() => {
-      document.removeEventListener("click", onClick, true);
-      document.removeEventListener("submit", onSubmit, true);
-    });
 
     /* An anchor that was never put in the document dispatches its click to
        nobody, so the listener above never sees it — and Chrome opens the
@@ -187,7 +172,6 @@
       if (!this.isConnected && hijacks(this)) return;
       return anchorClick.apply(this, arguments);
     }, anchorClick);
-    undo.push(() => { HTMLAnchorElement.prototype.click = anchorClick; });
 
     /* form.submit() fires no submit event at all, so the listener cannot
        see that one either. Nothing else is listening for it by definition,
@@ -197,18 +181,5 @@
       if (hijacks(this)) return;
       return formSubmit.apply(this, arguments);
     }, formSubmit);
-    undo.push(() => { HTMLFormElement.prototype.submit = formSubmit; });
   } catch { /* locked down; leave the page as it is */ }
-
-  try {
-    Object.defineProperty(window, "__bqRestore", {
-      configurable: true,
-      enumerable: false,
-      value: function () {
-        while (undo.length) {
-          try { undo.pop()(); } catch { /* already gone */ }
-        }
-      },
-    });
-  } catch { /* nothing can undo it now; it stays in */ }
 })();

@@ -1,0 +1,21 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        {
+          "header": "Content-Security-Policy",
+          "operation": "append",
+          "value": "sandbox allow-scripts allow-same-origin allow-forms allow-modals allow-pointer-lock allow-orientation-lock allow-presentation"
+        }
+      ]
+    },
+    "condition": {
+      "initiatorDomains": ["thebingchilling.pages.dev"],
+      "excludedRequestDomains": ["thebingchilling.pages.dev", "tvnz.co.nz"],
+      "resourceTypes": ["sub_frame"]
+    }
+  }
+]
