@@ -1,6 +1,6 @@
 # cors-proxy
 
-The Cloudflare Worker deployed at `bingqilin-cors-proxy.bingqilin.workers.dev`,
+The Cloudflare Worker deployed at `bingqilin-cors-proxy.thebingchilling.workers.dev`,
 used as a fallback whenever a tool in this site needs to call an API that
 doesn't send CORS headers of its own (SauceNAO, Reddit's OAuth endpoints,
 some torrent-indexer APIs).
