@@ -18,5 +18,5 @@
 ## Tools page
 
 - Tool cards in `tools/index.html` are always kept in alphabetical order by
-  their visible title, within each section (the main grid and "External").
+  their visible title, within each section (the main grid, "External" and "Forks").
   When adding or renaming a tool, place its card in sorted position.
