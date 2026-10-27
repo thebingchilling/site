@@ -135,7 +135,7 @@ inside it can see that it is there.
 
 ## Where it runs
 
-`https://thebingchilling.github.io/`, `/index`, `/index.html`, `/live` and
+`https://thebingchilling.pages.dev/`, `/index`, `/index.html`, `/live` and
 `/live.html` — the site serves the bare and the `.html` spelling of each,
 and its own service worker precaches both.
 

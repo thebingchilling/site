@@ -1,4 +1,4 @@
-# Bingqilin — a static site on GitHub Pages.
+# Bingqilin — a static site on Cloudflare Pages.
 User-agent: *
 Allow: /
 
@@ -8,4 +8,4 @@ Disallow: /shared/vendor/
 Disallow: /shared/fonts/
 Disallow: /downloads/
 
-Sitemap: https://thebingchilling.github.io/sitemap.xml
+Sitemap: https://thebingchilling.pages.dev/sitemap.xml

@@ -20,7 +20,7 @@
 
    Scope is enforced by the permission, not just by the path list below:
    tabs.get() fills in a tab's URL only for hosts the extension can access,
-   and the only host in the manifest is thebingchilling.github.io. A tab on
+   and the only host in the manifest is thebingchilling.pages.dev. A tab on
    any other site comes back with no URL at all and fails isPlayerUrl()
    before its path is ever considered. /tools/ fails on the path.
    ═══════════════════════════════════════════════════════════════════════ */

@@ -1,4 +1,4 @@
-# thebingchilling.github.io
+# thebingchilling.pages.dev
 
 > **Code agents (e.g. Claude Code): read this file in full before making
 > any changes to this repository.**
