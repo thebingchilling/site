@@ -93,12 +93,69 @@
     return proxy;
   };
 
-  /* Keep the replacements looking native: a script that prints one should
-     not see a giveaway body. */
+  /* ── Looking native ───────────────────────────────────────────────────
+     The frame is sandboxed, and sources that refuse to play under a
+     sandbox go looking for it. Each way they look has to come back the
+     way it would in a frame that is not, or the decoy has hidden nothing.
+
+     A replacement must not give itself away when inspected: the same
+     name and length as the original, no own toString, and
+     Function.prototype.toString — which is how a careful script reads
+     a function, since it cannot be overridden per function — printing
+     the original's "[native code]". */
+  const nativeToString = Function.prototype.toString;
+  const shownAs = new WeakMap();   // replacement -> the original it stands in for
+
+  try {
+    const toString = {
+      toString() {
+        return nativeToString.call(shownAs.has(this) ? shownAs.get(this) : this);
+      },
+    }.toString;
+    shownAs.set(toString, nativeToString);
+    Object.defineProperty(Function.prototype, "toString", {
+      configurable: true, writable: true, enumerable: false, value: toString,
+    });
+  } catch { /* non-fatal: only the disguise is lost */ }
+
   const mask = (replacement, original) => {
-    try { replacement.toString = () => original.toString(); } catch { /* non-fatal */ }
+    shownAs.set(replacement, original);
+    try {
+      Object.defineProperty(replacement, "name", { configurable: true, value: original.name });
+      Object.defineProperty(replacement, "length", { configurable: true, value: original.length });
+    } catch { /* non-fatal */ }
     return replacement;
   };
+
+  /* document.domain: setting it throws in any sandboxed document, whatever
+     the sandbox allows ("Assignment is forbidden for sandboxed iframes"),
+     which makes `document.domain = document.domain` the standard one-line
+     sandbox test. Outside a sandbox the same assignment succeeds (or is
+     silently ignored), so this throw, and only this one, is swallowed.
+     Any other error from the setter is real and still thrown. */
+  try {
+    const domain = Object.getOwnPropertyDescriptor(Document.prototype, "domain");
+    if (domain?.set) {
+      const set = mask(function (value) {
+        try {
+          return domain.set.call(this, value);
+        } catch (e) {
+          if (!(e?.name === "SecurityError" && /sandbox/i.test(e.message))) throw e;
+          /* The sandbox check runs first and hides the one that would
+             have followed, so a value that is not this host or a suffix
+             of it must still be refused, as it is outside a sandbox. */
+          const host = location.hostname;
+          const v = String(value).toLowerCase();
+          if (v === host || (v.includes(".") && host.endsWith("." + v))) return;
+          throw new DOMException(
+            `Failed to set the 'domain' property on 'Document': '${value}' is not a suffix of '${host}'.`,
+            "SecurityError",
+          );
+        }
+      }, domain.set);
+      Object.defineProperty(Document.prototype, "domain", { ...domain, set });
+    }
+  } catch { /* non-fatal */ }
 
   /* ── The decoy ───────────────────────────────────────────────────── */
   try {

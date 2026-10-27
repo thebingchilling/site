@@ -84,6 +84,19 @@ source that will not play under a sandbox is detecting that `window.open`
 failed — here it does not fail, because the decoy answers before the
 sandbox is ever asked.
 
+`window.open` returning `null` is not the only way to spot a sandbox, so
+the decoy also covers the others a source can check from inside the
+frame:
+
+| Check | Sandboxed, unhidden | With the decoy |
+| --- | --- | --- |
+| `document.domain = document.domain` | Throws "Assignment is forbidden for sandboxed iframes" | Succeeds; an invalid value is still refused as usual |
+| `Function.prototype.toString.call(window.open)` | The decoy's own source | `function open() { [native code] }` |
+| `window.open.name`, `.length`, own `toString` | `""`, an own property | `"open"`, none — same as native |
+
+Each was checked against the same page outside the player: every answer
+matches.
+
 ### The targets, which never ask `window.open` at all
 
 `window.open` is the smaller half. The overlay stretched across the video
