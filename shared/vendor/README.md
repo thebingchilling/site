@@ -13,7 +13,7 @@ the version.
 
 It sits in `/shared/vendor/` rather than beside `live.html` because
 a `live/` directory would collide with the extensionless `/live` URL that
-GitHub Pages serves `live.html` from — which the bottom navigation, the
+Cloudflare Pages serves `live.html` from — which the bottom navigation, the
 service worker's precache list and the popup blocker's scope check all
 rely on.
 

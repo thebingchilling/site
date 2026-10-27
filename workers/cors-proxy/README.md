@@ -5,7 +5,7 @@ used as a fallback whenever a tool in this site needs to call an API that
 doesn't send CORS headers of its own (SauceNAO, Reddit's OAuth endpoints,
 some torrent-indexer APIs).
 
-This directory exists purely for version control — GitHub Pages can't run
+This directory exists purely for version control — Cloudflare Pages can't run
 this Worker itself, so it's not part of the site's deploy. Deploy changes
 to it manually (Cloudflare dashboard, or `wrangler deploy` if you set up a
 `wrangler.toml` locally) after editing `worker.js` here.

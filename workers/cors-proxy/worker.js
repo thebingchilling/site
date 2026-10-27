@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════
    Bingqilin CORS proxy — a small, generic Cloudflare Worker.
 
-   GitHub Pages can't run a server, so a handful of tools in this toolbox
+   Cloudflare Pages can't run a server, so a handful of tools in this toolbox
    (SauceNAO + Reddit lookups in the reverse-image-search tool, arbitrary
    indexer APIs in the torrent search tool) need somewhere else to make
    the actual request when the target doesn't send CORS headers of its

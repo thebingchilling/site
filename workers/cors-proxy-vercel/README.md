@@ -10,7 +10,7 @@ nothing to do with this site's own usage. Vercel Edge Functions run on a
 genuinely different network, so this gives tools a real second path to
 fall back to when that happens.
 
-This directory exists purely for version control — GitHub Pages can't run
+This directory exists purely for version control — Cloudflare Pages can't run
 this function itself, so it's not part of the site's deploy.
 
 ## Deploy
