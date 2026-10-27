@@ -30,6 +30,10 @@ Never *refusing* is also what keeps this invisible to the source. A source
 that will not play under a sandbox is detecting that `window.open` failed —
 here it does not fail.
 
+Behind the decoy, the same frames are **sandboxed** too — see
+[The sandbox](#the-sandbox). The decoy is what the embed sees; the
+sandbox is what actually stops it.
+
 ## The decoy
 
 Closing is always late. The way to have nothing to close is for
@@ -74,6 +78,49 @@ Three paths, because two of them never reach a listener:
 `<base target="_blank">`, which turns every plain link in the frame into a
 popup, is resolved too. Links with no target, or `target="_self"`, are left
 exactly as they were.
+
+## The sandbox
+
+The decoy and the target cancelling are scripts, and a script can be
+outrun: an opener nobody anticipated, a frame nested inside the embed on
+an origin that was never granted. So granted sources are also served
+with
+
+    Content-Security-Policy: sandbox allow-scripts allow-same-origin allow-forms
+      allow-modals allow-pointer-lock allow-orientation-lock allow-presentation
+
+added to their frame responses by a `declarativeNetRequest` session rule.
+No `allow-popups` and no `allow-top-navigation`: Chrome itself refuses
+every new tab and every navigation of the player's tab from that frame,
+and from every frame nested inside it, whatever script asked.
+
+The `<iframe sandbox>` attribute was tried before and dropped, because
+sources refused to play: a sandboxed `window.open` returns `null`, and
+they check. A header gives the same sandbox, but the decoy is still in
+the frame, so the check gets a window back and the sandbox does the
+refusing out of sight. The page is not changed at all.
+
+The header is *appended*. Every CSP header is enforced on its own, so the
+source's own policy is left exactly as it was.
+
+Two rules, because a sandbox from a header belongs to the document, not
+the frame:
+
+| Rule | Covers |
+| --- | --- |
+| Frames this site loads from a granted host | The embed's first load. It is in place before the player exists, so it cannot lose a race to it |
+| Any frame load from a granted host inside a player tab | An embed that sends its own frame to a new URL, which would otherwise get a fresh, unsandboxed document |
+
+What it does **not** cover:
+
+- **Sources you have not granted.** Changing a response's headers needs
+  host permission for it — the same one click the decoy needs.
+- **An embed that sends its own frame to a host nobody granted.** That
+  document is out of reach, and is left to the fallback.
+- **Detection from a nested frame.** Frames inside the embed inherit the
+  sandbox but not the decoy (unless their host is granted too), so there
+  `window.open` really does return `null`. Popups stay blocked; a source
+  that checks from there could refuse to play.
 
 ### Where it runs, and how it keeps up
 
@@ -279,7 +326,7 @@ works everywhere, which is why that is still listed first above.
 ## Files
 
 - `manifest.json` — MV3; `webNavigation` + `storage` + `declarativeNetRequest`, host permissions for this site and tvnz.co.nz
-- `background.js` — the three rules
+- `background.js` — the three rules, and the sandbox rules
 - `content/keepalive.js` — keeps the worker resident, reports source origins
 - `content/no-popup.js` — the decoy window and the target cancelling,
   injected into granted sources

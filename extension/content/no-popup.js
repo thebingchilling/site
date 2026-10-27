@@ -13,6 +13,11 @@
    truthy and well-behaved, and simply never opens anything. Nothing is
    created, so there is no tab to close and no flash to see.
 
+   The same frames are also sandboxed now, by a header the worker adds
+   (see "The sandbox" in background.js), and that is what actually stops
+   them. This is what keeps the sandbox from showing: without it the
+   embed's window.open would return the sandbox's null.
+
    The shape below is what popup scripts actually touch. Most do:
 
        var w = window.open(url, "_blank");

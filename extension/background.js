@@ -52,19 +52,21 @@ const playerTabs = new Map(); // tabId -> the player URL it is on
 const noteKey = (tabId) => `player:${tabId}`;
 
 function remember(tabId, url) {
+  const isNew = !playerTabs.has(tabId);
   playerTabs.set(tabId, url);
   chrome.storage.session.set({ [noteKey(tabId)]: url });
+  if (isNew) syncSandbox();
 }
 
 function forget(tabId) {
-  playerTabs.delete(tabId);
+  if (playerTabs.delete(tabId)) syncSandbox();
   chrome.storage.session.remove(noteKey(tabId));
 }
 
 /* A restarted worker has an empty Map but session storage survives, so
    refill from it. Racing a popup that arrives first is fine — that one
    takes the slow path and is closed a few milliseconds later. */
-chrome.storage.session.get(null).then((all) => {
+const tabsLoaded = chrome.storage.session.get(null).then((all) => {
   for (const [key, url] of Object.entries(all)) {
     if (!key.startsWith("player:")) continue;
     const tabId = Number(key.slice("player:".length));
@@ -226,7 +228,7 @@ let wantedOrigins = [];
 
 const asPattern = (origin) => `${origin}/*`;
 
-chrome.storage.local.get(WANTED_KEY).then((got) => {
+const wantedLoaded = chrome.storage.local.get(WANTED_KEY).then((got) => {
   if (Array.isArray(got[WANTED_KEY]) && !wantedOrigins.length) {
     wantedOrigins = got[WANTED_KEY];
     refreshBadge();
@@ -279,6 +281,7 @@ async function syncStub() {
     await chrome.scripting.unregisterContentScripts({ ids: [STUB_SCRIPT_ID, GATE_SCRIPT_ID] });
   } catch { /* was not registered */ }
 
+  await syncSandbox();
   if (!granted.length) return;
 
   const matches = granted.map(asPattern);
@@ -297,6 +300,97 @@ async function syncStub() {
     ]);
   } catch (e) {
     console.warn("could not register the popup stub:", e?.message);
+  }
+}
+
+/* ── The sandbox ───────────────────────────────────────────────────────
+   The decoy and the target cancelling are scripts, and a script can be
+   outrun: an opener the stub does not know about, a nested frame on an
+   origin nobody granted, an about:blank frame that ran before it. The
+   sandbox is not a script. A frame whose response carries
+   `Content-Security-Policy: sandbox` without allow-popups cannot open a
+   tab, and without allow-top-navigation cannot navigate the one it is in
+   — Chrome refuses both, and every frame nested inside inherits it.
+
+   Why a header rather than the <iframe sandbox> attribute: the attribute
+   was tried and sources refused to play, because a sandboxed window.open
+   returns null and they check. Here the decoy is still in place in the
+   same frame, so the check gets its window and the sandbox does the
+   refusing behind it. The page itself is untouched.
+
+   Appended, not replacing: every CSP header is enforced on its own, so
+   the source's own policy stays exactly as it was.
+
+   Two rules, because neither covers the other's case:
+     • frames the player loads (initiator is this site), which is in place
+       before the player exists and so cannot lose a race to its first
+       embed;
+     • any frame navigation inside a player tab, because a sandbox set by
+       a header belongs to the document, not the frame — an embed that
+       sends its own frame to a new URL would otherwise get a fresh,
+       unsandboxed document.
+   Both only for granted source hosts: changing a response's headers
+   needs host permission for it, the same grant the decoy runs under. A
+   frame that navigates itself to a host nobody granted is out of reach. */
+
+const SANDBOX_CSP = [
+  "sandbox",
+  "allow-scripts",
+  "allow-same-origin",
+  "allow-forms",
+  "allow-modals",
+  "allow-pointer-lock",
+  "allow-orientation-lock",
+  "allow-presentation",
+].join(" ");
+
+const SANDBOX_FROM_PLAYER = 1;
+const SANDBOX_IN_PLAYER_TABS = 2;
+
+let sandboxSync = Promise.resolve();
+
+/* Serialised: tabs come and go in bursts, and two overlapping updates
+   could each remove the other's rules before adding their own. */
+function syncSandbox() {
+  sandboxSync = sandboxSync.then(writeSandboxRules, writeSandboxRules);
+  return sandboxSync;
+}
+
+async function writeSandboxRules() {
+  /* A restarted worker starts with both of these empty. Writing before
+     they are read back would drop the rules for no reason. */
+  await Promise.all([tabsLoaded, wantedLoaded]);
+  const granted = (await grantedOrigins())
+    .map(originOf)
+    .filter((o) => o !== `https://${PLAYER_HOST}` && wantedOrigins.includes(o));
+  const hosts = [...new Set(granted.map((o) => new URL(o).hostname))];
+  const tabIds = [...playerTabs.keys()];
+
+  const action = {
+    type: "modifyHeaders",
+    responseHeaders: [{ header: "Content-Security-Policy", operation: "append", value: SANDBOX_CSP }],
+  };
+  const addRules = [];
+  if (hosts.length) {
+    addRules.push({
+      id: SANDBOX_FROM_PLAYER, priority: 1, action,
+      condition: { initiatorDomains: [PLAYER_HOST], requestDomains: hosts, resourceTypes: ["sub_frame"] },
+    });
+    if (tabIds.length) {
+      addRules.push({
+        id: SANDBOX_IN_PLAYER_TABS, priority: 1, action,
+        condition: { tabIds, requestDomains: hosts, resourceTypes: ["sub_frame"] },
+      });
+    }
+  }
+
+  try {
+    await chrome.declarativeNetRequest.updateSessionRules({
+      removeRuleIds: [SANDBOX_FROM_PLAYER, SANDBOX_IN_PLAYER_TABS],
+      addRules,
+    });
+  } catch (e) {
+    console.warn("could not update the sandbox rules:", e?.message);
   }
 }
 
@@ -363,3 +457,4 @@ chrome.permissions.onAdded.addListener(() => { syncStub(); refreshBadge(); });
 chrome.permissions.onRemoved.addListener(() => { syncStub(); refreshBadge(); });
 chrome.runtime.onStartup.addListener(() => { syncStub(); refreshBadge(); });
 chrome.runtime.onInstalled.addListener(() => { syncStub(); refreshBadge(); });
+syncSandbox();
