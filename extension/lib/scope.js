@@ -14,7 +14,7 @@
 
 export const PLAYER_HOST = "thebingchilling.pages.dev";
 
-/* Both spellings of each page. GitHub Pages serves an extensionless path
+/* Both spellings of each page. Cloudflare Pages serves an extensionless path
    by falling back to the .html file, and the site takes it up: its own
    service worker precaches "/live" alongside "/live.html", and the bottom
    navigation links to the bare "/live". A tab sitting on that URL is the
