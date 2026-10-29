@@ -48,6 +48,11 @@
     .btn-row .btn { flex: 1; }
 
     @media (max-width: 420px) { .adv-grid { grid-template-columns: 1fr; } }
+    .adv-grid .span-2 { grid-column: 1 / -1; }
+    #endpointRow { margin-top: 0.6rem; }
+
+    .mode-group { margin-bottom: 0.6rem; }
+    .mode-hint { margin: 0 0 0.9rem; }
 
     .output-section.hidden { display: none; }
 
@@ -133,6 +138,12 @@
       <div class="section-title"><h2><span class="material-icons" aria-hidden="true">bolt</span>Generate</h2></div>
       <p class="section-hint">Creates a WireGuard keypair in your browser, then registers the public key for a free WARP device.</p>
 
+      <div class="segmented mode-group" id="modeGroup" role="radiogroup" aria-label="Config type">
+        <button class="segmented__item" type="button" role="radio" aria-checked="true" data-mode="wg">WireGuard</button>
+        <button class="segmented__item" type="button" role="radio" aria-checked="false" data-mode="awg">AmneziaWG</button>
+      </div>
+      <p class="section-hint mode-hint" id="modeHint"></p>
+
       <button type="button" class="btn btn--primary btn--block" id="generateBtn">
         <span class="material-icons" aria-hidden="true">autorenew</span>Generate WARP config
       </button>
@@ -141,7 +152,23 @@
         <span class="material-icons" aria-hidden="true">expand_more</span>Advanced options
       </button>
       <div class="adv-grid" id="advGrid">
-        <p class="section-hint">Standard WireGuard connection settings — the defaults match Cloudflare's own app, so most people can leave these alone.</p>
+        <p class="section-hint">Standard WireGuard connection settings — the defaults match Cloudflare's own app, so most people can leave these alone. Once a config is generated, changing these updates it without registering again.</p>
+        <div class="span-2">
+          <label class="field-label" for="optEndpointMode">Endpoint</label>
+          <div class="select-row">
+            <select id="optEndpointMode">
+              <option value="default">Cloudflare's default</option>
+              <option value="random">Random IP and port</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="input-row hidden" id="endpointRow">
+            <input id="optEndpoint" type="text" placeholder="162.159.192.1:2408" spellcheck="false" autocomplete="off" aria-label="Endpoint address" />
+            <button type="button" class="icon-btn" id="rerollBtn" aria-label="Pick another random endpoint" title="Pick another">
+              <span class="material-icons" aria-hidden="true">shuffle</span>
+            </button>
+          </div>
+        </div>
         <div>
           <label class="field-label" for="optDns">DNS servers</label>
           <div class="input-row"><input id="optDns" type="text" value="1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001" /></div>
@@ -165,6 +192,18 @@
         <div>
           <label class="field-label" for="optLocale">Locale</label>
           <div class="input-row"><input id="optLocale" type="text" value="en_US" /></div>
+        </div>
+        <div class="awg-only hidden">
+          <label class="field-label" for="optJc">Junk packets (Jc)</label>
+          <div class="input-row"><input id="optJc" type="number" value="4" min="0" max="128" /></div>
+        </div>
+        <div class="awg-only hidden">
+          <label class="field-label" for="optJmin">Junk min size (Jmin)</label>
+          <div class="input-row"><input id="optJmin" type="number" value="40" min="0" max="1280" /></div>
+        </div>
+        <div class="awg-only hidden">
+          <label class="field-label" for="optJmax">Junk max size (Jmax)</label>
+          <div class="input-row"><input id="optJmax" type="number" value="70" min="0" max="1280" /></div>
         </div>
       </div>
 
@@ -193,12 +232,12 @@
       <div class="card">
         <div class="section-title"><h2><span class="material-icons" aria-hidden="true">qr_code_2</span>Scan to import</h2></div>
         <div class="qr-box" id="qrBox"></div>
-        <p class="qr-label">Scan with the WireGuard mobile app</p>
+        <p class="qr-label" id="qrLabel">Scan with the WireGuard mobile app</p>
       </div>
 
       <div class="card">
         <div class="section-title"><h2><span class="material-icons" aria-hidden="true">description</span>Configuration</h2></div>
-        <textarea class="config-output" id="configOutput" readonly spellcheck="false" aria-label="Generated WireGuard configuration"></textarea>
+        <textarea class="config-output" id="configOutput" readonly spellcheck="false" aria-label="Generated configuration"></textarea>
         <div class="btn-row">
           <button type="button" class="btn btn--ghost" id="copyBtn"><span class="material-icons" aria-hidden="true">content_copy</span>Copy</button>
           <button type="button" class="btn btn--ghost" id="downloadBtn"><span class="material-icons" aria-hidden="true">download</span>Download</button>
@@ -210,7 +249,7 @@
       <span class="material-icons" aria-hidden="true">shield</span>
       <div>
         <p>WARP is Cloudflare's VPN, built on the WireGuard protocol. This page generates a private/public keypair right here — Cloudflare's server only ever sees the public half, which is how it can register a device for you without learning your private key.</p>
-        <p>Based on <a href="https://github.com/lanrat/wireguard-warp-generator" target="_blank" rel="noopener">lanrat/wireguard-warp-generator</a>.</p>
+        <p>Based on <a href="https://github.com/lanrat/wireguard-warp-generator" target="_blank" rel="noopener">lanrat/wireguard-warp-generator</a>; AmneziaWG mode borrows from <a href="https://github.com/Skiro1/warp-awg-gen" target="_blank" rel="noopener">Skiro1/warp-awg-gen</a>.</p>
       </div>
     </div>
   </main>
@@ -235,6 +274,7 @@
 
 <script src="/tools/warp/vendor/curve25519.js"></script>
 <script src="/tools/warp/vendor/qrcode-generator.js"></script>
+<script src="/tools/warp/vendor/awg-payloads.js"></script>
 <script src="/shared/chrome.js"></script>
 <script>
 (function () {
@@ -254,21 +294,102 @@
     "https://bingqilin-cors-proxy.thebingchilling.workers.dev/?url=",
     "https://thebingchilling-github-io.vercel.app/api/proxy?url=",
   ];
-  const WARP_API = "https://api.cloudflareclient.com/v0a737/reg";
+  /* Tried in order. The first is the one this page has always used; the
+     rest are the versioned prefixes other WARP clients register under,
+     there in case Cloudflare retires the first. Some of them wrap the
+     registration in { result: … } — normalizeRegistration copes. */
+  const WARP_API_VERSIONS = ["v0a737", "v0a1909051800", "v0i1909051800"];
+  const WARP_API_BASE = "https://api.cloudflareclient.com/";
+
+  /* WARP's anycast addresses, and the UDP ports its servers answer on
+     besides 2408 — a network that blocks the default port often misses
+     these. Same lists as Skiro1/warp-awg-gen. */
+  const WARP_IPS = [
+    "162.159.192.1", "162.159.192.11", "162.159.192.14", "162.159.192.21",
+    "162.159.192.24", "162.159.192.31", "162.159.192.34", "162.159.192.41",
+    "162.159.192.44", "162.159.192.51", "162.159.192.54", "162.159.192.61",
+    "162.159.192.64", "162.159.192.71", "162.159.192.74", "162.159.192.81",
+    "162.159.192.84", "162.159.192.91", "162.159.192.94", "162.159.192.101",
+    "162.159.192.105", "162.159.192.106", "162.159.192.205", "162.159.192.215",
+  ];
+  const WARP_PORTS = [
+    854, 859, 864, 878, 880, 890, 891, 894, 903, 908,
+    928, 934, 939, 942, 943, 945, 946, 955, 968, 987,
+    988, 1002, 1010, 1014, 1018, 1070, 1074, 1180, 1387, 1843,
+    2371, 2506, 3138, 3476, 3581, 3854, 4177, 4198, 4233, 5279,
+    5956, 7103, 7152, 7156, 7281, 7559, 8319, 8742, 8854, 8886,
+  ];
+
+  const MODE_HINTS = {
+    wg: "A standard config for the official WireGuard apps.",
+    awg: "Adds junk packets and a real WARP QUIC packet before the handshake, to get past DPI blocking. Needs the AmneziaVPN or AmneziaWG app — the regular WireGuard app won't import it.",
+  };
 
   const generateBtn = $("generateBtn");
   const advToggle = $("advToggle"), advGrid = $("advGrid");
+  const modeGroup = $("modeGroup"), modeHint = $("modeHint");
+  const endpointMode = $("optEndpointMode"), endpointRow = $("endpointRow");
+  const endpointInput = $("optEndpoint"), rerollBtn = $("rerollBtn");
   const errorBanner = $("errorBanner"), errorBody = $("errorBody");
   const outputSection = $("outputSection");
   const configOutput = $("configOutput");
-  const qrBox = $("qrBox");
+  const qrBox = $("qrBox"), qrLabel = $("qrLabel");
   const copyBtn = $("copyBtn"), downloadBtn = $("downloadBtn");
+
+  /* The current registration, kept for this visit only so changing an
+     option rebuilds the config instead of registering another device.
+     Deliberately not persisted: a registration saved for later can go
+     stale and still produce a config that imports but never connects. */
+  let session = null;
+  let mode = "wg";
 
   advToggle.addEventListener("click", () => {
     const open = advGrid.classList.toggle("adv-grid--open");
     advToggle.classList.toggle("adv-toggle--open", open);
     advToggle.setAttribute("aria-expanded", String(open));
   });
+
+  function setMode(next) {
+    mode = next;
+    for (const btn of modeGroup.querySelectorAll(".segmented__item")) {
+      btn.setAttribute("aria-checked", String(btn.dataset.mode === mode));
+    }
+    modeHint.textContent = MODE_HINTS[mode];
+    for (const el of advGrid.querySelectorAll(".awg-only")) el.classList.toggle("hidden", mode !== "awg");
+    render();
+  }
+  modeGroup.addEventListener("click", (e) => {
+    const btn = e.target.closest(".segmented__item");
+    if (btn && btn.dataset.mode !== mode) setMode(btn.dataset.mode);
+  });
+  setMode("wg");
+
+  function randomInt(n) { return crypto.getRandomValues(new Uint32Array(1))[0] % n; }
+  function randomPick(list) { return list[randomInt(list.length)]; }
+  function randomHex(bytes) {
+    return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function randomEndpoint() { return randomPick(WARP_IPS) + ":" + randomPick(WARP_PORTS); }
+
+  endpointMode.addEventListener("change", () => {
+    const m = endpointMode.value;
+    endpointRow.classList.toggle("hidden", m === "default");
+    rerollBtn.classList.toggle("hidden", m !== "random");
+    if (m === "random") endpointInput.value = randomEndpoint();
+    if (m === "custom") endpointInput.focus();
+    render();
+  });
+  rerollBtn.addEventListener("click", () => { endpointInput.value = randomEndpoint(); render(); });
+  // Editing a random pick makes it a custom endpoint.
+  endpointInput.addEventListener("input", () => {
+    if (endpointMode.value === "random") { endpointMode.value = "custom"; rerollBtn.classList.add("hidden"); }
+  });
+
+  function intOption(id, fallback) {
+    const n = parseInt($(id).value, 10);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  }
 
   function getOptions() {
     return {
@@ -278,6 +399,10 @@
       keepalive: $("optKeepalive").value.trim() || "0",
       deviceType: $("optDeviceType").value.trim() || "Linux",
       locale: $("optLocale").value.trim() || "en_US",
+      endpoint: endpointMode.value === "default" ? "" : endpointInput.value.trim(),
+      jc: intOption("optJc", 4),
+      jmin: intOption("optJmin", 40),
+      jmax: intOption("optJmax", 70),
     };
   }
 
@@ -317,19 +442,27 @@
     $("expiresDate").textContent = formatDate(account.ttl);
   }
 
+  // An AmneziaWG config carries a ~1.2 KB I1 packet as hex, which is past
+  // what a QR code holds even at the lowest error correction — say so
+  // rather than failing silently.
   function renderQrCode(config) {
     qrBox.innerHTML = "";
-    try {
-      const qr = window.qrcode(0, "M");
-      qr.addData(config);
-      qr.make();
-      const img = document.createElement("img");
-      img.alt = "WireGuard config QR code";
-      img.src = qr.createDataURL(6, 12);
-      qrBox.appendChild(img);
-    } catch (err) {
-      qrBox.innerHTML = '<p class="section-hint" style="margin:0;">QR code generation failed.</p>';
+    for (const level of ["M", "L"]) {
+      try {
+        const qr = window.qrcode(0, level);
+        qr.addData(config);
+        qr.make();
+        const img = document.createElement("img");
+        img.alt = "Config QR code";
+        img.src = qr.createDataURL(level === "M" ? 6 : 4, 12);
+        qrBox.appendChild(img);
+        qrLabel.textContent = mode === "awg" ? "Scan with the AmneziaVPN app" : "Scan with the WireGuard mobile app";
+        qrLabel.classList.remove("hidden");
+        return;
+      } catch (err) { /* too long at this level — try the next */ }
     }
+    qrBox.innerHTML = '<p class="section-hint" style="margin:0;">Too long for a QR code — copy or download the config below instead.</p>';
+    qrLabel.classList.add("hidden");
   }
 
   function apiErrorMessage(data) {
@@ -350,75 +483,124 @@
     // most often means the proxy or Cloudflare's own WARP API rate-limited
     // *that* egress IP specifically — worth retrying through the next
     // proxy rather than failing outright, same as a network/parse error.
+    // Every proxy on one API version before moving to the next version: a
+    // proxy problem is far likelier than a retired version.
     let lastErr;
-    for (const proxy of CORS_PROXIES) {
-      let response, text;
-      try {
-        response = await fetch(proxy + encodeURIComponent(WARP_API), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        text = await response.text();
-      } catch (e) { lastErr = e; continue; }
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        lastErr = new Error(friendlyProxyError(response.status, text));
-        continue;
+    for (const version of WARP_API_VERSIONS) {
+      for (const proxy of CORS_PROXIES) {
+        let response, text;
+        try {
+          response = await fetch(proxy + encodeURIComponent(WARP_API_BASE + version + "/reg"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          text = await response.text();
+        } catch (e) { lastErr = e; continue; }
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          lastErr = new Error(friendlyProxyError(response.status, text));
+          continue;
+        }
+        if (!response.ok) {
+          lastErr = new Error("API error: " + apiErrorMessage(data) + (data.errors || data.error ? "" : ` (HTTP ${response.status})`));
+          continue;
+        }
+        if (data.success === false) throw new Error("API error: " + apiErrorMessage(data));
+        const reg = normalizeRegistration(data);
+        if (!reg) { lastErr = new Error("Cloudflare's API answered in a format this page doesn't recognise."); continue; }
+        return reg;
       }
-      if (!response.ok) {
-        lastErr = new Error("API error: " + apiErrorMessage(data) + (data.errors || data.error ? "" : ` (HTTP ${response.status})`));
-        continue;
-      }
-      if (data.success === false) throw new Error("API error: " + apiErrorMessage(data));
-      return data;
     }
     throw lastErr;
   }
 
-  function generateConfig(privateKey, warpResponse, options) {
-    const peer = warpResponse.config.peers[0];
-    const iface = warpResponse.config.interface;
+  function normalizeRegistration(data) {
+    const reg = data && data.result && data.result.config ? data.result : data;
+    const config = reg && reg.config;
+    const ok = config && config.peers && config.peers[0] && config.peers[0].public_key
+      && config.interface && config.interface.addresses && config.interface.addresses.v4;
+    return ok ? reg : null;
+  }
+
+  function stripCidr(addr) { return String(addr).split("/")[0]; }
+
+  /* AmneziaWG's I2–I5: one to three random byte blocks of 16–63 bytes. */
+  function randomCps() {
+    let out = "";
+    for (let i = randomInt(3) + 1; i > 0; i--) out += "<b 0x" + randomHex(randomInt(48) + 16) + ">";
+    return out;
+  }
+
+  function generateConfig(s, options) {
+    const peer = s.reg.config.peers[0];
+    const addrs = s.reg.config.interface.addresses;
+    const defaultEndpoint = (peer.endpoint && peer.endpoint.host) || "engage.cloudflareclient.com:2408";
     let config =
       "[Interface]\n" +
-      "PrivateKey = " + privateKey + "\n" +
-      "Address = " + iface.addresses.v4 + "/32, " + iface.addresses.v6 + "/128\n" +
+      "PrivateKey = " + s.privateKey + "\n" +
+      "Address = " + stripCidr(addrs.v4) + "/32" + (addrs.v6 ? ", " + stripCidr(addrs.v6) + "/128" : "") + "\n" +
       "DNS = " + options.dns + "\n" +
-      "MTU = " + options.mtu + "\n" +
+      "MTU = " + options.mtu + "\n";
+    if (mode === "awg") {
+      // S1/S2 and H1–H4 must stay at plain WireGuard's values: Cloudflare's
+      // end is stock WireGuard, and only the client-side junk (Jc/Jmin/
+      // Jmax, I1–I5) is invisible to it.
+      const jmin = Math.min(options.jmin, options.jmax), jmax = Math.max(options.jmin, options.jmax);
+      config +=
+        "Jc = " + options.jc + "\nJmin = " + jmin + "\nJmax = " + jmax + "\n" +
+        "S1 = 0\nS2 = 0\nH1 = 1\nH2 = 2\nH3 = 3\nH4 = 4\n" +
+        "I1 = " + s.cps[0] + "\n" +
+        s.cps.slice(1).map((v, i) => "I" + (i + 2) + " = " + v + "\n").join("");
+    }
+    config +=
       "\n[Peer]\n" +
       "PublicKey = " + peer.public_key + "\n" +
       "AllowedIPs = " + options.allowedIps + "\n" +
-      "Endpoint = " + peer.endpoint.host;
+      "Endpoint = " + (options.endpoint || defaultEndpoint);
     if (options.keepalive && options.keepalive !== "0") {
       config += "\nPersistentKeepalive = " + options.keepalive;
     }
     return config;
   }
 
+  function render() {
+    if (!session) return;
+    const config = generateConfig(session, getOptions());
+    if (config === configOutput.value) return;
+    configOutput.value = config;
+    renderQrCode(config);
+  }
+  advGrid.addEventListener("input", render);
+
   generateBtn.addEventListener("click", async () => {
     hideError();
     generateBtn.disabled = true;
-    const originalHtml = generateBtn.innerHTML;
     generateBtn.innerHTML = '<span class="spinner"></span>Generating…';
     try {
       if (typeof window.wireguard !== "object") throw new Error("Key generator failed to load.");
       const keypair = window.wireguard.generateKeypair();
       const options = getOptions();
-      const warpResponse = await registerWithWarp(keypair.publicKey, options);
-      const config = generateConfig(keypair.privateKey, warpResponse, options);
+      const reg = await registerWithWarp(keypair.publicKey, options);
+      // The camouflage packets are picked once per registration, so
+      // switching modes or editing options doesn't reshuffle them.
+      const i1 = window.WARP_AWG_I1 ? randomPick(window.WARP_AWG_I1) : "<b 0x" + randomHex(64) + ">";
+      session = { privateKey: keypair.privateKey, reg, cps: [i1, randomCps(), randomCps(), randomCps(), randomCps()] };
 
-      displayAccountInfo(warpResponse);
-      renderQrCode(config);
-      configOutput.value = config;
+      displayAccountInfo(reg);
+      configOutput.value = "";
+      render();
       outputSection.classList.remove("hidden");
     } catch (err) {
-      outputSection.classList.add("hidden");
+      // A failed re-registration leaves the previous config as it was.
+      if (!session) outputSection.classList.add("hidden");
       showError(BQChrome.errorText(err, "Couldn't generate a configuration — try again."));
     } finally {
       generateBtn.disabled = false;
-      generateBtn.innerHTML = originalHtml;
+      generateBtn.innerHTML = '<span class="material-icons" aria-hidden="true">autorenew</span>'
+        + (session ? "Register a new device" : "Generate WARP config");
     }
   });
 
@@ -444,7 +626,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "warp.conf";
+    a.download = mode === "awg" ? "warp-awg.conf" : "warp.conf";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
