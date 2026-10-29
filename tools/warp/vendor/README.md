@@ -1,6 +1,6 @@
 # Vendored: Curve25519 keygen, QR code encoder, AmneziaWG payloads
 
-Both files are vendored (not fetched from a CDN at runtime) so `/tools/warp`
+All three files are vendored (not fetched from a CDN at runtime) so `/tools/warp`
 works fully offline for the parts that don't need the network, and never
 depends on a third-party host for its crypto or QR rendering.
 
