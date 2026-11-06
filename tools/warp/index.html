@@ -186,10 +186,6 @@
           <div class="input-row"><input id="optKeepalive" type="number" value="0" min="0" /></div>
         </div>
         <div>
-          <label class="field-label" for="optSlot">Slot (Quartz)</label>
-          <div class="input-row"><input id="optSlot" type="text" value="warp" spellcheck="false" autocomplete="off" /></div>
-        </div>
-        <div>
           <label class="field-label" for="optDeviceType">Device type</label>
           <div class="input-row"><input id="optDeviceType" type="text" value="Linux" /></div>
         </div>
@@ -407,19 +403,17 @@
       jc: intOption("optJc", 4),
       jmin: intOption("optJmin", 40),
       jmax: intOption("optJmax", 70),
-      slot: /^[a-z0-9][a-z0-9-]{0,31}$/.test($("optSlot").value.trim().toLowerCase())
-        ? $("optSlot").value.trim().toLowerCase() : "warp",
     };
   }
 
   /* Quartz (thebingchilling/quartz) reads these comments to file the config
-     under a WARP slot, regenerate it in place and enforce its expiry. They
-     go inside [Interface], which WireGuard and AmneziaWG apps ignore and
-     keep. Same format as the app's generator (FORK.md §9). */
+     as its WARP (or WARP AWG) tunnel, replacing the previous one, and to
+     enforce its expiry. They go inside [Interface], which WireGuard and
+     AmneziaWG apps ignore and keep. Same format as the app (FORK.md §9). */
   function quartzMarkers(s, options) {
     const lines = [
       "# WGT-Generator = warp",
-      "# WGT-Slot = " + options.slot,
+      "# WGT-Slot = warp",
       "# WGT-Variant = " + (mode === "awg" ? "awg" : "wg"),
     ];
     if (s.expiresAt) lines.push("# WGT-Expires = " + new Date(s.expiresAt).toISOString().replace(/\.\d{3}Z$/, "Z"));
