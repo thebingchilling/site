@@ -171,7 +171,7 @@
         </div>
         <div>
           <label class="field-label" for="optDns">DNS servers</label>
-          <div class="input-row"><input id="optDns" type="text" value="1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001" /></div>
+          <div class="input-row"><input id="optDns" type="text" value="1.1.1.1, 1.0.0.1" /></div>
         </div>
         <div>
           <label class="field-label" for="optMtu">MTU</label>
@@ -566,7 +566,10 @@
       "[Interface]\n" +
       quartzMarkers(s, options) +
       "PrivateKey = " + s.privateKey + "\n" +
-      "Address = " + stripCidr(addrs.v4) + "/32" + (addrs.v6 ? ", " + stripCidr(addrs.v6) + "/128" : "") + "\n" +
+      // IPv4 only: AllowedIPs still routes ::/0 into the tunnel, so IPv6 is
+      // blocked rather than leaking around it, and the exit is WARP's IPv4,
+      // which geolocates to your region (WARP's IPv6 range often doesn't).
+      "Address = " + stripCidr(addrs.v4) + "/32\n" +
       "DNS = " + options.dns + "\n" +
       "MTU = " + options.mtu + "\n";
     if (mode === "awg") {
