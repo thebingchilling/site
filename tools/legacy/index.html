@@ -110,6 +110,21 @@
         </button>
       </div>
     </div>
+
+    <div class="card">
+      <label class="field-label" for="hostSelect">Host to block</label>
+      <div class="select-row">
+        <select id="hostSelect"></select>
+      </div>
+
+      <label class="field-label" for="outHost">Hostname</label>
+      <div class="field-outlined">
+        <input class="mono" id="outHost" type="text" readonly placeholder="No host selected" />
+        <button class="icon-btn" id="copyHostBtn" type="button" aria-label="Copy hostname">
+          <span class="material-icons" aria-hidden="true">content_copy</span>
+        </button>
+      </div>
+    </div>
   </main>
 
   <div class="bottom-dock">
@@ -385,6 +400,18 @@ async function generateActivation(serial, reqSpaced) {
   return b64enc(cipher).match(/.{1,4}/g).join(' ');
 }
 
+// ── Block list ───────────────────────────────────────────────────────────────
+// Hosts offered in the "Host to block" dropdown. One hostname per entry, no
+// scheme and no path — e.g. "updates.example.com". Blank entries are shown as
+// unset slots and are skipped until they're filled in.
+const BLOCK_HOSTS = [
+  "",
+  "",
+  "",
+  "",
+  "",
+];
+
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -422,6 +449,39 @@ async function generateActivation(serial, reqSpaced) {
     }
   });
   $("copyActBtn").addEventListener("click", () => copy($("outActivation").value, "Activation code"));
+
+  // ── Block list dropdown ──
+  // Fill the dropdown from BLOCK_HOSTS. Entries still blank are listed as
+  // unset slots and can't be chosen, so the control reads correctly while the
+  // array is being filled in.
+  (function initHosts() {
+    const sel = $("hostSelect");
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select a host…";
+    sel.appendChild(placeholder);
+
+    BLOCK_HOSTS.forEach((host, i) => {
+      const opt = document.createElement("option");
+      const name = host.trim();
+      if (name) {
+        opt.value = name;
+        opt.textContent = name;
+      } else {
+        opt.value = "";
+        opt.textContent = "— slot " + (i + 1) + " (unset) —";
+        opt.disabled = true;
+      }
+      sel.appendChild(opt);
+    });
+
+    sel.addEventListener("change", () => {
+      $("outHost").value = sel.value;
+    });
+  })();
+
+  $("copyHostBtn").addEventListener("click", () => copy($("outHost").value.trim(), "Hostname"));
 
 })();
 </script>
